@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { HeaderNav } from "@/components/header-nav"
 import { SidebarNav } from "@/components/sidebar-nav"
 import { Button } from "@/components/ui/button"
@@ -25,7 +26,6 @@ const sidebarItems = [
   { title: "Users", href: "/dashboard/admin/users", icon: "👥" },
   { title: "Courses", href: "/dashboard/admin/courses", icon: "📚" },
   { title: "Reports", href: "/dashboard/admin/reports", icon: "📊" },
-  { title: "Settings", href: "/dashboard/admin/settings", icon: "⚙️" },
   { title: "Analytics", href: "/dashboard/admin/analytics", icon: "📈" },
 ]
 
@@ -38,49 +38,6 @@ interface User {
   joinedDate: string
 }
 
-const mockUsers: User[] = [
-  {
-    id: "1",
-    name: "Alex Johnson",
-    email: "alex@example.com",
-    role: "student",
-    status: "active",
-    joinedDate: "2024-01-15",
-  },
-  {
-    id: "2",
-    name: "Dr. Sarah Johnson",
-    email: "sarah@example.com",
-    role: "teacher",
-    status: "active",
-    joinedDate: "2024-01-10",
-  },
-  {
-    id: "3",
-    name: "Michael Brown",
-    email: "michael@example.com",
-    role: "student",
-    status: "inactive",
-    joinedDate: "2024-02-01",
-  },
-  {
-    id: "4",
-    name: "Prof. James Wilson",
-    email: "james@example.com",
-    role: "teacher",
-    status: "active",
-    joinedDate: "2024-01-20",
-  },
-  {
-    id: "5",
-    name: "Emily Chen",
-    email: "emily@example.com",
-    role: "manager",
-    status: "active",
-    joinedDate: "2024-01-25",
-  },
-]
-
 interface SystemStats {
   totalUsers: number
   activeUsers: number
@@ -90,26 +47,106 @@ interface SystemStats {
   systemHealth: number
 }
 
-const systemStats: SystemStats = {
-  totalUsers: 1245,
-  activeUsers: 892,
-  totalCourses: 56,
-  totalStudents: 1050,
-  totalTeachers: 120,
-  systemHealth: 98,
-}
+// Mock data and stats replaced by API integration
 
 export default function AdminDashboard() {
   const router = useRouter()
+  const { data: session } = useSession()
+  const [users, setUsers] = useState<User[]>([])
+  const [stats, setStats] = useState<SystemStats | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
   const [isUserDialogOpen, setIsUserDialogOpen] = useState(false)
   const [newUser, setNewUser] = useState({ name: "", email: "", role: "student" })
+
+  const fetchData = async () => {
+    try {
+      const statsRes = await fetch('/api/stats', { cache: 'no-store' })
+      const statsData = await statsRes.json()
+      if (statsData.success) setStats(statsData.data)
+
+      const usersRes = await fetch('/api/users', { cache: 'no-store' })
+      const usersData = await usersRes.json()
+      if (usersData.success) {
+        setUsers(usersData.data.map((u: any) => ({
+          id: u._id,
+          name: u.name,
+          email: u.email,
+          role: u.role,
+          status: u.status,
+          joinedDate: new Date(u.joinedDate).toLocaleDateString()
+        })))
+      }
+    } catch (error) {
+      toast.error("Dashboard failed to synchronize with vault")
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchData()
+  }, [])
+
+  const handleAddUser = async () => {
+    if (!newUser.name || !newUser.email) {
+      toast.error("Name and Email are required")
+      return
+    }
+
+    try {
+      const payload = {
+        ...newUser,
+        password: "password123", // Default password
+        // Type assertion for instituteId if not strictly typed in session
+        instituteId: (session?.user as any)?.instituteId || "65b2a3c4e8f1a2b3c4d5e6f7" // Fallback or handle error
+      }
+
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      const data = await res.json()
+
+      if (data.success) {
+        toast.success("User added successfully")
+        setIsUserDialogOpen(false)
+        setNewUser({ name: "", email: "", role: "student" })
+        fetchData()
+      } else {
+        toast.error(data.error || "Failed to add user")
+      }
+    } catch (e) {
+      toast.error("Failed to create user")
+    }
+  }
+
+  const handleDisableUser = async (userId: string) => {
+    try {
+      const res = await fetch(`/api/users/${userId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'inactive' })
+      })
+      const data = await res.json()
+
+      if (data.success) {
+        toast.success("User access revoked")
+        fetchData()
+      } else {
+        toast.error("Failed to disable user")
+      }
+    } catch (e) {
+      toast.error("Action failed")
+    }
+  }
 
   return (
     <div className="flex h-screen bg-background">
       {/* Sidebar */}
       <aside className="hidden sm:flex flex-col w-64 border-r border-border bg-sidebar">
-        <div className="flex items-center gap-2 px-4 py-6 border-b border-sidebar-border">
-          <span className="text-lg font-bold text-sidebar-foreground">EduHub</span>
+        <div className="flex items-center justify-center py-6 border-b border-sidebar-border">
+          <img src="/logo.png" alt="Orbit" className="w-24 h-24 object-contain" />
         </div>
         <SidebarNav
           items={sidebarItems}
@@ -122,7 +159,7 @@ export default function AdminDashboard() {
       {/* Main Content */}
       <div className="flex flex-col flex-1 overflow-hidden">
         <HeaderNav
-          userName="Admin User"
+          userName={session?.user?.name || "Admin"}
           userRole="Administrator"
           onLogout={() => {
             router.push("/login")
@@ -135,7 +172,7 @@ export default function AdminDashboard() {
             <div className="flex justify-between items-center mb-8">
               <div>
                 <h1 className="text-3xl font-bold text-foreground mb-2">System Dashboard</h1>
-                <p className="text-muted-foreground">Monitor and manage your EduHub instance</p>
+                <p className="text-muted-foreground">Monitor and manage your Orbit instance</p>
               </div>
               <Dialog open={isUserDialogOpen} onOpenChange={setIsUserDialogOpen}>
                 <DialogTrigger asChild>
@@ -183,12 +220,7 @@ export default function AdminDashboard() {
                     <Button variant="outline" onClick={() => setIsUserDialogOpen(false)}>
                       Cancel
                     </Button>
-                    <Button
-                      onClick={() => {
-                        setIsUserDialogOpen(false)
-                        setNewUser({ name: "", email: "", role: "student" })
-                      }}
-                    >
+                    <Button onClick={handleAddUser}>
                       Add User
                     </Button>
                   </DialogFooter>
@@ -201,7 +233,7 @@ export default function AdminDashboard() {
               <Card>
                 <CardContent className="pt-6">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-primary mb-2">{systemStats.totalUsers}</div>
+                    <div className="text-3xl font-bold text-primary mb-2">{isLoading ? "---" : stats?.totalUsers}</div>
                     <p className="text-sm text-muted-foreground">Total Users</p>
                   </div>
                 </CardContent>
@@ -209,7 +241,7 @@ export default function AdminDashboard() {
               <Card>
                 <CardContent className="pt-6">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-secondary mb-2">{systemStats.activeUsers}</div>
+                    <div className="text-3xl font-bold text-secondary mb-2">{isLoading ? "---" : stats?.activeUsers}</div>
                     <p className="text-sm text-muted-foreground">Active Users</p>
                   </div>
                 </CardContent>
@@ -217,7 +249,7 @@ export default function AdminDashboard() {
               <Card>
                 <CardContent className="pt-6">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-accent mb-2">{systemStats.totalCourses}</div>
+                    <div className="text-3xl font-bold text-primary mb-2">{isLoading ? "---" : stats?.totalCourses}</div>
                     <p className="text-sm text-muted-foreground">Courses</p>
                   </div>
                 </CardContent>
@@ -225,7 +257,7 @@ export default function AdminDashboard() {
               <Card>
                 <CardContent className="pt-6">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-primary mb-2">{systemStats.totalStudents}</div>
+                    <div className="text-3xl font-bold text-secondary mb-2">{isLoading ? "---" : stats?.totalStudents}</div>
                     <p className="text-sm text-muted-foreground">Students</p>
                   </div>
                 </CardContent>
@@ -233,7 +265,7 @@ export default function AdminDashboard() {
               <Card>
                 <CardContent className="pt-6">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-secondary mb-2">{systemStats.totalTeachers}</div>
+                    <div className="text-3xl font-bold text-primary mb-2">{isLoading ? "---" : stats?.totalTeachers}</div>
                     <p className="text-sm text-muted-foreground">Teachers</p>
                   </div>
                 </CardContent>
@@ -241,7 +273,7 @@ export default function AdminDashboard() {
               <Card>
                 <CardContent className="pt-6">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-accent mb-2">{systemStats.systemHealth}%</div>
+                    <div className="text-3xl font-bold text-secondary mb-2">{isLoading ? "---" : stats?.systemHealth}%</div>
                     <p className="text-sm text-muted-foreground">Health</p>
                   </div>
                 </CardContent>
@@ -264,7 +296,11 @@ export default function AdminDashboard() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
-                      {mockUsers.map((user) => (
+                      {isLoading ? (
+                        <div className="p-10 text-center animate-pulse italic text-muted-foreground font-medium">
+                          Retrieving authorized profiles from the system...
+                        </div>
+                      ) : users.slice(0, 5).map((user) => (
                         <div
                           key={user.id}
                           className="p-4 rounded-lg border border-border hover:border-primary/50 transition flex items-center justify-between"
@@ -299,7 +335,7 @@ export default function AdminDashboard() {
                               <Button
                                 size="sm"
                                 variant="destructive"
-                                onClick={() => toast.error(`Account restricted: ${user.name}`)}
+                                onClick={() => handleDisableUser(user.id)}
                               >
                                 Disable
                               </Button>
@@ -313,61 +349,18 @@ export default function AdminDashboard() {
               </TabsContent>
 
               <TabsContent value="activity" className="space-y-4">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  {/* Login Activity */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Recent Login Activity</CardTitle>
-                      <CardDescription>Last 10 user logins</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        {[
-                          { user: "Alex Johnson", time: "2024-02-20 14:30", device: "Chrome - macOS" },
-                          { user: "Dr. Sarah Johnson", time: "2024-02-20 13:15", device: "Safari - iOS" },
-                          { user: "Emily Chen", time: "2024-02-20 12:45", device: "Chrome - Windows" },
-                          { user: "Prof. James Wilson", time: "2024-02-20 11:20", device: "Firefox - Linux" },
-                          { user: "Michael Brown", time: "2024-02-20 10:30", device: "Chrome - macOS" },
-                        ].map((activity, i) => (
-                          <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                            <div>
-                              <p className="text-sm font-medium text-foreground">{activity.user}</p>
-                              <p className="text-xs text-muted-foreground">{activity.device}</p>
-                            </div>
-                            <p className="text-sm text-muted-foreground">{activity.time}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* System Events */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>System Events</CardTitle>
-                      <CardDescription>Recent system events and alerts</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        {[
-                          { event: "Course Created", user: "Dr. Sarah Johnson", time: "2 hours ago" },
-                          { event: "User Registered", user: "New Student", time: "4 hours ago" },
-                          { event: "Assessment Submitted", user: "45 Students", time: "6 hours ago" },
-                          { event: "System Backup", user: "System", time: "1 day ago" },
-                          { event: "Certificate Issued", user: "20 Students", time: "2 days ago" },
-                        ].map((item, i) => (
-                          <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                            <div>
-                              <p className="text-sm font-medium text-foreground">{item.event}</p>
-                              <p className="text-xs text-muted-foreground">{item.user}</p>
-                            </div>
-                            <p className="text-sm text-muted-foreground">{item.time}</p>
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
+                <Card>
+                  <CardHeader>
+                    <CardTitle>System Activity</CardTitle>
+                    <CardDescription>Real-time system events</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground">
+                      <p>No recent system activity recorded.</p>
+                      <p className="text-xs mt-2">(Activity logging is currently not enabled)</p>
+                    </div>
+                  </CardContent>
+                </Card>
               </TabsContent>
 
               <TabsContent value="settings" className="space-y-4">

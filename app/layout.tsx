@@ -8,11 +8,17 @@ const _geist = Geist({ subsets: ["latin"] })
 const _geistMono = Geist_Mono({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "EduHub - Modern Learning Management System",
+  title: "Orbit - Modern Learning Management System",
   description: "A comprehensive LMS platform for universities, colleges, and training institutes",
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
 }
 
 import { Toaster } from "@/components/ui/sonner"
+import { Providers } from "@/components/providers"
 
 export default function RootLayout({
   children,
@@ -21,10 +27,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <meta charSet="UTF-8" />
+      </head>
       <body className={`font-sans antialiased`}>
-        {children}
-        <Toaster position="top-right" closeButton richColors />
-        <Analytics />
+        <Providers>
+          {children}
+          <Toaster position="top-right" closeButton richColors />
+          <Analytics />
+        </Providers>
       </body>
     </html>
   )

@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { HeaderNav } from "@/components/header-nav"
 import { SidebarNav } from "@/components/sidebar-nav"
 import { Button } from "@/components/ui/button"
@@ -14,15 +15,15 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
-import { Search, Download, TrendingUp, AlertCircle, CheckCircle, Clock } from "lucide-react"
+import { Search, Download, TrendingUp, AlertCircle, CheckCircle, Clock, LayoutDashboard, BookOpen, FileText, BarChart as BarChartIcon, ClipboardList, PieChart as PieChartIcon } from "lucide-react"
 
 const sidebarItems = [
-    { title: "Dashboard", href: "/dashboard/teacher", icon: "🏠" },
-    { title: "My Courses", href: "/dashboard/teacher/courses", icon: "📚" },
-    { title: "Assessments", href: "/dashboard/teacher/assessments", icon: "✍️" },
-    { title: "Student Progress", href: "/dashboard/teacher/progress", icon: "📊" },
-    { title: "Attendance", href: "/dashboard/teacher/attendance", icon: "📋" },
-    { title: "Reports", href: "/dashboard/teacher/reports", icon: "📈" },
+    { title: "Dashboard", href: "/dashboard/teacher", icon: <LayoutDashboard className="w-5 h-5" /> },
+    { title: "My Courses", href: "/dashboard/teacher/courses", icon: <BookOpen className="w-5 h-5" /> },
+    { title: "Assessments", href: "/dashboard/teacher/assessments", icon: <FileText className="w-5 h-5" /> },
+    { title: "Student Progress", href: "/dashboard/teacher/progress", icon: <BarChartIcon className="w-5 h-5" /> },
+    { title: "Attendance", href: "/dashboard/teacher/attendance", icon: <ClipboardList className="w-5 h-5" /> },
+    { title: "Reports", href: "/dashboard/teacher/reports", icon: <PieChartIcon className="w-5 h-5" /> },
 ]
 
 interface Student {
@@ -38,57 +39,6 @@ interface Student {
     status: "Excellent" | "Good" | "Average" | "At Risk"
 }
 
-const mockStudents: Student[] = [
-    {
-        id: "1",
-        name: "Alex Johnson",
-        email: "alex.j@example.com",
-        avatar: "AJ",
-        overallScore: 92,
-        courseCompletion: 85,
-        attendance: 96,
-        assignmentsSubmitted: 11,
-        totalAssignments: 12,
-        status: "Excellent",
-    },
-    {
-        id: "2",
-        name: "Sarah Smith",
-        email: "sarah.s@example.com",
-        avatar: "SS",
-        overallScore: 78,
-        courseCompletion: 65,
-        attendance: 85,
-        assignmentsSubmitted: 9,
-        totalAssignments: 12,
-        status: "Good",
-    },
-    {
-        id: "3",
-        name: "Mike Tyson",
-        email: "mike.t@example.com",
-        avatar: "MT",
-        overallScore: 65,
-        courseCompletion: 45,
-        attendance: 72,
-        assignmentsSubmitted: 6,
-        totalAssignments: 12,
-        status: "Average",
-    },
-    {
-        id: "4",
-        name: "Emily Watson",
-        email: "emily.w@example.com",
-        avatar: "EW",
-        overallScore: 45,
-        courseCompletion: 30,
-        attendance: 55,
-        assignmentsSubmitted: 4,
-        totalAssignments: 12,
-        status: "At Risk",
-    },
-]
-
 const performanceData = [
     { name: 'Mon', activity: 4 },
     { name: 'Tue', activity: 3 },
@@ -101,7 +51,45 @@ const performanceData = [
 
 export default function StudentProgressPage() {
     const router = useRouter()
+    const { data: session } = useSession()
+    const [students, setStudents] = useState<Student[]>([])
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
+    const [loading, setLoading] = useState(true)
+
+    const fetchStudents = async () => {
+        try {
+            const res = await fetch('/api/users?role=student')
+            const data = await res.json()
+            if (data.success) {
+                // Transform API user data to Student interface with mock stats
+                // In a real app, these stats would come from a separate 'student-performance' API
+                const mappedStudents: Student[] = data.data.map((user: any) => ({
+                    id: user._id,
+                    name: user.name,
+                    email: user.email,
+                    avatar: user.name.charAt(0).toUpperCase(),
+                    overallScore: Math.floor(Math.random() * 40) + 60, // Mock score 60-100
+                    courseCompletion: Math.floor(Math.random() * 100),
+                    attendance: Math.floor(Math.random() * 30) + 70, // Mock attendance 70-100
+                    assignmentsSubmitted: Math.floor(Math.random() * 12),
+                    totalAssignments: 12,
+                    status: ['Excellent', 'Good', 'Average', 'At Risk'][Math.floor(Math.random() * 4)] as any
+                }))
+                setStudents(mappedStudents)
+                if (mappedStudents.length > 0) {
+                    setSelectedStudent(mappedStudents[0])
+                }
+            }
+        } catch (error) {
+            console.error("Failed to fetch students")
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    useEffect(() => {
+        fetchStudents()
+    }, [])
 
     const getStatusColor = (status: Student['status']) => {
         switch (status) {
@@ -116,15 +104,14 @@ export default function StudentProgressPage() {
     return (
         <div className="flex h-screen bg-background">
             <aside className="hidden sm:flex flex-col w-64 border-r border-border bg-sidebar">
-                <div className="flex items-center gap-2 px-4 py-6 border-b border-sidebar-border">
-                    <div className="w-8 h-8 bg-sidebar-primary rounded-lg flex items-center justify-center text-sidebar-primary-foreground font-bold">E</div>
-                    <span className="text-lg font-bold text-sidebar-foreground">EduHub</span>
+                <div className="flex items-center justify-center py-6 border-b border-sidebar-border">
+                    <img src="/logo.png" alt="Orbit" className="w-24 h-24 object-contain" />
                 </div>
                 <SidebarNav items={sidebarItems} onLogout={() => router.push("/login")} />
             </aside>
 
             <div className="flex flex-col flex-1 overflow-hidden">
-                <HeaderNav userName="Dr. Sarah Johnson" userRole="Teacher" onLogout={() => router.push("/login")} />
+                <HeaderNav userName={session?.user?.name || "Teacher"} userRole="Teacher" onLogout={() => router.push("/login")} />
 
                 <main className="flex-1 overflow-auto bg-muted/20">
                     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto h-full flex flex-col">
@@ -161,7 +148,7 @@ export default function StudentProgressPage() {
                                     </div>
                                 </CardHeader>
                                 <div className="flex-1 overflow-y-auto p-2">
-                                    {mockStudents.map(student => (
+                                    {students.map((student: Student) => (
                                         <div
                                             key={student.id}
                                             onClick={() => setSelectedStudent(student)}

@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { HeaderNav } from "@/components/header-nav"
 import { SidebarNav } from "@/components/sidebar-nav"
 import { Button } from "@/components/ui/button"
@@ -34,7 +35,6 @@ const sidebarItems = [
     { title: "Users", href: "/dashboard/admin/users", icon: "👥" },
     { title: "Courses", href: "/dashboard/admin/courses", icon: "📚" },
     { title: "Reports", href: "/dashboard/admin/reports", icon: "📊" },
-    { title: "Settings", href: "/dashboard/admin/settings", icon: "⚙️" },
     { title: "Analytics", href: "/dashboard/admin/analytics", icon: "📈" },
 ]
 
@@ -47,28 +47,48 @@ interface User {
     joinedDate: string
 }
 
-const mockUsers: User[] = [
-    { id: "1", name: "Alex Johnson", email: "alex@example.com", role: "student", status: "active", joinedDate: "2024-01-15" },
-    { id: "2", name: "Dr. Sarah Johnson", email: "sarah@example.com", role: "teacher", status: "active", joinedDate: "2024-01-10" },
-    { id: "3", name: "Michael Brown", email: "michael@example.com", role: "student", status: "inactive", joinedDate: "2024-02-01" },
-    { id: "4", name: "Prof. James Wilson", email: "james@example.com", role: "teacher", status: "active", joinedDate: "2024-01-20" },
-    { id: "5", name: "Emily Chen", email: "emily@example.com", role: "manager", status: "active", joinedDate: "2024-01-25" },
-    { id: "6", name: "David Miller", email: "david@example.com", role: "student", status: "active", joinedDate: "2024-02-05" },
-    { id: "7", name: "Linda Garcia", email: "linda@example.com", role: "teacher", status: "active", joinedDate: "2024-02-10" },
-    { id: "8", name: "Kevin Smith", email: "kevin@example.com", role: "student", status: "active", joinedDate: "2024-02-12" },
-]
+// Mock data removed in favor of MongoDB integration
 
 export default function UserManagementPage() {
     const router = useRouter()
+    const { data: session } = useSession()
+    const [users, setUsers] = useState<User[]>([])
+    const [isLoading, setIsLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState("")
     const [roleFilter, setRoleFilter] = useState("all")
     const [isAddUserOpen, setIsAddUserOpen] = useState(false)
-    const [newUser, setNewUser] = useState({ name: "", email: "", role: "student" })
+    const [newUser, setNewUser] = useState({ name: "", email: "", role: "student", password: "password123", status: "active", image: "" })
     const [isEditUserOpen, setIsEditUserOpen] = useState(false)
     const [selectedUser, setSelectedUser] = useState<User | null>(null)
     const [isDeleteOpen, setIsDeleteOpen] = useState(false)
 
-    const filteredUsers = mockUsers.filter((user) => {
+    useEffect(() => {
+        fetchUsers()
+    }, [])
+
+    const fetchUsers = async () => {
+        setIsLoading(true)
+        try {
+            const res = await fetch('/api/users')
+            const result = await res.json()
+            if (result.success) {
+                setUsers(result.data.map((u: any) => ({
+                    id: u._id,
+                    name: u.name,
+                    email: u.email,
+                    role: u.role,
+                    status: u.status,
+                    joinedDate: new Date(u.joinedDate).toLocaleDateString()
+                })))
+            }
+        } catch (error) {
+            toast.error("Failed to fetch workforce data")
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    const filteredUsers = users.filter((user) => {
         const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             user.email.toLowerCase().includes(searchTerm.toLowerCase())
         const matchesRole = roleFilter === "all" || user.role === roleFilter
@@ -80,8 +100,22 @@ export default function UserManagementPage() {
             const user = data as User;
             setSelectedUser(user)
             if (action === 'Edit Profile') {
-                setNewUser({ name: user.name, email: user.email, role: user.role })
-                setIsEditUserOpen(true)
+                // Fetch full user data to get the image
+                fetch(`/api/users/${user.id}`)
+                    .then(res => res.json())
+                    .then(result => {
+                        if (result.success) {
+                            setNewUser({
+                                name: result.data.name,
+                                email: result.data.email,
+                                role: result.data.role,
+                                password: "password123",
+                                status: result.data.status,
+                                image: result.data.image || ""
+                            })
+                            setIsEditUserOpen(true)
+                        }
+                    })
             } else if (action === 'Delete') {
                 setIsDeleteOpen(true)
             } else {
@@ -96,47 +130,95 @@ export default function UserManagementPage() {
         }
     }
 
-    const handleUpdateUser = () => {
-        setIsEditUserOpen(false)
-        toast.success("Profile Updated", {
-            description: `Identity records for ${newUser.name} have been synchronized.`,
-        })
+    const handleUpdateUser = async () => {
+        if (!selectedUser) return
+
+        try {
+            const res = await fetch(`/api/users/${selectedUser.id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newUser)
+            })
+            const result = await res.json()
+            if (result.success) {
+                setIsEditUserOpen(false)
+                toast.success("Profile Updated", {
+                    description: `Identity records for ${newUser.name} have been synchronized.`,
+                })
+                fetchUsers()
+            } else {
+                toast.error(result.error || "Failed to update user")
+            }
+        } catch (error) {
+            toast.error("Database update error")
+        }
     }
 
-    const handleDeleteConfirm = () => {
-        setIsDeleteOpen(false)
-        toast.error("Account Terminated", {
-            description: "User access has been permanently revoked from the system.",
-        })
+    const handleDeleteConfirm = async () => {
+        if (!selectedUser) return
+
+        try {
+            const res = await fetch(`/api/users/${selectedUser.id}`, {
+                method: 'DELETE'
+            })
+            const result = await res.json()
+            if (result.success) {
+                setIsDeleteOpen(false)
+                toast.error("Account Terminated", {
+                    description: "User access has been permanently revoked from the system.",
+                })
+                fetchUsers()
+            } else {
+                toast.error(result.error || "Failed to delete user")
+            }
+        } catch (error) {
+            toast.error("Database deletion error")
+        }
     }
 
-    const handleCreateUser = () => {
+    const handleCreateUser = async () => {
         if (!newUser.name || !newUser.email) {
             toast.error("Required Fields Missing", {
                 description: "Please enter both name and email to proceed.",
             })
             return
         }
-        setIsAddUserOpen(false)
-        toast.success("User Created", {
-            description: `${newUser.name} has been added to the system.`,
-        })
-        setNewUser({ name: "", email: "", role: "student" })
+
+        try {
+            const res = await fetch('/api/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(newUser)
+            })
+            const result = await res.json()
+            if (result.success) {
+                setIsAddUserOpen(false)
+                toast.success("User Created", {
+                    description: `${newUser.name} has been added to the system database.`,
+                })
+                setNewUser({ name: "", email: "", role: "student", password: "password123", status: "active", image: "" })
+                fetchUsers()
+            } else {
+                toast.error(result.error || "Failed to create user")
+            }
+        } catch (error) {
+            toast.error("Critical database synchronization error")
+        }
     }
 
     return (
         <div className="flex h-screen bg-background">
             {/* Premium Sidebar with Glassmorphism */}
             <aside className="hidden lg:flex flex-col w-72 border-r border-border/40 bg-sidebar/30 backdrop-blur-xl">
-                <div className="flex items-center gap-4 px-10 py-12 border-b border-sidebar-border/40 group cursor-pointer" onClick={() => router.push("/")}>
-                    <span className="text-2xl font-black tracking-tighter text-sidebar-foreground group-hover:text-primary transition-colors italic">EduHub</span>
+                <div className="flex items-center justify-center py-8 border-b border-sidebar-border/40 group cursor-pointer" onClick={() => router.push("/")}>
+                    <img src="/logo.png" alt="Orbit" className="w-28 h-28 object-contain" />
                 </div>
                 <SidebarNav items={sidebarItems} onLogout={() => router.push("/login")} />
             </aside>
 
             {/* Main Content Area */}
             <div className="flex flex-col flex-1 overflow-hidden">
-                <HeaderNav userName="Admin User" userRole="Administrator" onLogout={() => router.push("/login")} />
+                <HeaderNav userName={session?.user?.name || "Admin"} userRole="Administrator" onLogout={() => router.push("/login")} />
 
                 <main className="flex-1 overflow-auto bg-gradient-to-br from-background via-primary/[0.02] to-background">
                     <div className="p-8 md:p-12 lg:p-16 max-w-7xl mx-auto space-y-12">
@@ -165,19 +247,37 @@ export default function UserManagementPage() {
                                             <Label className="uppercase tracking-widest text-[10px] font-black text-muted-foreground ml-1">Academic Email</Label>
                                             <Input type="email" placeholder="john@example.com" className="h-12 bg-muted/30 border-none rounded-xl" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} />
                                         </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-3">
+                                                <Label className="uppercase tracking-widest text-[10px] font-black text-muted-foreground ml-1">System Role</Label>
+                                                <Select value={newUser.role} onValueChange={(v) => setNewUser({ ...newUser, role: v })}>
+                                                    <SelectTrigger className="h-12 bg-muted/30 border-none rounded-xl">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="rounded-xl">
+                                                        <SelectItem value="student">Student</SelectItem>
+                                                        <SelectItem value="teacher">Teacher</SelectItem>
+                                                        <SelectItem value="manager">Manager</SelectItem>
+                                                        <SelectItem value="admin">Admin</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            <div className="space-y-3">
+                                                <Label className="uppercase tracking-widest text-[10px] font-black text-muted-foreground ml-1">Status</Label>
+                                                <Select value={newUser.status} onValueChange={(v) => setNewUser({ ...newUser, status: v })}>
+                                                    <SelectTrigger className="h-12 bg-muted/30 border-none rounded-xl">
+                                                        <SelectValue />
+                                                    </SelectTrigger>
+                                                    <SelectContent className="rounded-xl">
+                                                        <SelectItem value="active">Active</SelectItem>
+                                                        <SelectItem value="inactive">Inactive</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
                                         <div className="space-y-3">
-                                            <Label className="uppercase tracking-widest text-[10px] font-black text-muted-foreground ml-1">System Role</Label>
-                                            <Select value={newUser.role} onValueChange={(v) => setNewUser({ ...newUser, role: v })}>
-                                                <SelectTrigger className="h-12 bg-muted/30 border-none rounded-xl">
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent className="rounded-xl">
-                                                    <SelectItem value="student">Student</SelectItem>
-                                                    <SelectItem value="teacher">Teacher</SelectItem>
-                                                    <SelectItem value="manager">Manager</SelectItem>
-                                                    <SelectItem value="admin">Admin</SelectItem>
-                                                </SelectContent>
-                                            </Select>
+                                            <Label className="uppercase tracking-widest text-[10px] font-black text-muted-foreground ml-1">Profile Image URL</Label>
+                                            <Input placeholder="https://..." className="h-12 bg-muted/30 border-none rounded-xl" value={newUser.image} onChange={(e) => setNewUser({ ...newUser, image: e.target.value })} />
                                         </div>
                                     </div>
                                     <DialogFooter>
@@ -320,19 +420,37 @@ export default function UserManagementPage() {
                             <Label className="uppercase tracking-widest text-[10px] font-black text-muted-foreground ml-1">Academic Email</Label>
                             <Input type="email" placeholder="john@example.com" className="h-12 bg-muted/30 border-none rounded-xl" value={newUser.email} onChange={(e) => setNewUser({ ...newUser, email: e.target.value })} />
                         </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-3">
+                                <Label className="uppercase tracking-widest text-[10px] font-black text-muted-foreground ml-1">System Role</Label>
+                                <Select value={newUser.role} onValueChange={(v) => setNewUser({ ...newUser, role: v })}>
+                                    <SelectTrigger className="h-12 bg-muted/30 border-none rounded-xl">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="rounded-xl">
+                                        <SelectItem value="student">Student</SelectItem>
+                                        <SelectItem value="teacher">Teacher</SelectItem>
+                                        <SelectItem value="manager">Manager</SelectItem>
+                                        <SelectItem value="admin">Admin</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-3">
+                                <Label className="uppercase tracking-widest text-[10px] font-black text-muted-foreground ml-1">Status</Label>
+                                <Select value={newUser.status} onValueChange={(v) => setNewUser({ ...newUser, status: v })}>
+                                    <SelectTrigger className="h-12 bg-muted/30 border-none rounded-xl">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent className="rounded-xl">
+                                        <SelectItem value="active">Active</SelectItem>
+                                        <SelectItem value="inactive">Inactive</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
                         <div className="space-y-3">
-                            <Label className="uppercase tracking-widest text-[10px] font-black text-muted-foreground ml-1">System Role</Label>
-                            <Select value={newUser.role} onValueChange={(v) => setNewUser({ ...newUser, role: v })}>
-                                <SelectTrigger className="h-12 bg-muted/30 border-none rounded-xl">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent className="rounded-xl">
-                                    <SelectItem value="student">Student</SelectItem>
-                                    <SelectItem value="teacher">Teacher</SelectItem>
-                                    <SelectItem value="manager">Manager</SelectItem>
-                                    <SelectItem value="admin">Admin</SelectItem>
-                                </SelectContent>
-                            </Select>
+                            <Label className="uppercase tracking-widest text-[10px] font-black text-muted-foreground ml-1">Profile Image URL</Label>
+                            <Input placeholder="https://..." className="h-12 bg-muted/30 border-none rounded-xl" value={newUser.image} onChange={(e) => setNewUser({ ...newUser, image: e.target.value })} />
                         </div>
                     </div>
                     <DialogFooter>

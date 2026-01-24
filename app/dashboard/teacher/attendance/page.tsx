@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { HeaderNav } from "@/components/header-nav"
 import { SidebarNav } from "@/components/sidebar-nav"
 import { Button } from "@/components/ui/button"
@@ -38,39 +39,204 @@ type AttendanceSession = {
   students: Student[]
 }
 
+// Attendance History Component
+function AttendanceHistory({ courseId }: { courseId: string }) {
+  const [history, setHistory] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (courseId) {
+      fetchHistory()
+    }
+  }, [courseId])
+
+  const fetchHistory = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch(`/api/attendance/history?courseId=${courseId}`)
+      const data = await response.json()
+      if (data.history) {
+        setHistory(data.history)
+      }
+    } catch (error) {
+      console.error('Error fetching history:', error)
+      toast.error('Failed to load attendance history')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="p-8 text-center">
+        <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2 text-primary" />
+        <p className="text-muted-foreground">Loading history...</p>
+      </div>
+    )
+  }
+
+  if (history.length === 0) {
+    return (
+      <div className="p-8 text-center text-muted-foreground">
+        <Calendar className="w-12 h-12 mx-auto mb-3 opacity-40" />
+        <p className="font-medium mb-1">No attendance records</p>
+        <p className="text-sm">Start marking attendance to see history here.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="border rounded-md">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Date</TableHead>
+            <TableHead>Student Name</TableHead>
+            <TableHead>Course</TableHead>
+            <TableHead>Status</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {history.map((record, i) => (
+            <TableRow key={i}>
+              <TableCell>{new Date(record.date).toLocaleDateString()}</TableCell>
+              <TableCell>
+                <div className="flex flex-col">
+                  <span className="font-medium">{record.studentName}</span>
+                  <span className="text-xs text-muted-foreground">{record.studentEmail}</span>
+                </div>
+              </TableCell>
+              <TableCell>{record.course}</TableCell>
+              <TableCell>
+                <Badge
+                  variant="outline"
+                  className={`
+                    ${record.status === 'present' ? 'bg-green-50 text-green-700 border-green-200' : ''}
+                    ${record.status === 'absent' ? 'bg-red-50 text-red-700 border-red-200' : ''}
+                    ${record.status === 'late' ? 'bg-yellow-50 text-yellow-700 border-yellow-200' : ''}
+                  `}
+                >
+                  {(record.status || "unknown").charAt(0).toUpperCase() + (record.status || "unknown").slice(1)}
+                </Badge>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  )
+}
+
 export default function AttendancePage() {
   const router = useRouter()
+  const { data: session } = useSession()
 
   // States
   const [activeTab, setActiveTab] = useState("mark")
-  const [selectedCourse, setSelectedCourse] = useState("web-dev")
+  const [selectedCourse, setSelectedCourse] = useState("")
   const [selectedBatch, setSelectedBatch] = useState("batch-a")
   const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0])
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
+  const [courses, setCourses] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
 
-  // Mock Data for Initial State
-  const [students, setStudents] = useState<Student[]>([
-    { id: "1", name: "Alex Johnson", rollNo: "WEB001", status: "pending" },
-    { id: "2", name: "Sarah Smith", rollNo: "WEB002", status: "pending" },
-    { id: "3", name: "Mike Tyson", rollNo: "WEB003", status: "pending" },
-    { id: "4", name: "Emily Watson", rollNo: "WEB004", status: "pending" },
-    { id: "5", name: "David Miller", rollNo: "WEB005", status: "pending" },
-  ])
+  // Students data from database
+  const [students, setStudents] = useState<Student[]>([])
 
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [isAutoSaving, setIsAutoSaving] = useState(false)
 
-  // Real-time Auto Save Simulation
+  // Fetch courses on mount
   useEffect(() => {
-    if (students.some(s => s.status !== 'pending')) {
+    fetchCourses()
+  }, [])
+
+  // Fetch students when course or date changes
+  useEffect(() => {
+    if (selectedCourse) {
+      fetchStudents()
+    }
+  }, [selectedCourse, selectedDate])
+
+  const fetchCourses = async () => {
+    try {
+      const response = await fetch('/api/courses')
+      const data = await response.json()
+      if (data.success && data.data) {
+        setCourses(data.data)
+        if (data.data.length > 0) {
+          setSelectedCourse(data.data[0]._id)
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching courses:', error)
+      toast.error('Failed to load courses')
+    }
+  }
+
+  const fetchStudents = async () => {
+    if (!selectedCourse) return
+
+    setLoading(true)
+    try {
+      const response = await fetch(
+        `/api/attendance/students?courseId=${selectedCourse}&date=${selectedDate}`
+      )
+      const data = await response.json()
+
+      if (data.students) {
+        setStudents(data.students)
+      } else {
+        setStudents([])
+        if (data.message) {
+          toast.info(data.message)
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching students:', error)
+      toast.error('Failed to load students')
+      setStudents([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Real-time Auto Save
+  useEffect(() => {
+    if (students.some(s => s.status !== 'pending') && selectedCourse) {
       setIsAutoSaving(true)
-      const timer = setTimeout(() => {
+      const timer = setTimeout(async () => {
+        await saveAttendance()
         setLastSaved(new Date())
         setIsAutoSaving(false)
-      }, 1500)
+      }, 2000)
       return () => clearTimeout(timer)
     }
   }, [students])
+
+  const saveAttendance = async () => {
+    if (!selectedCourse || students.length === 0) return
+
+    try {
+      const response = await fetch('/api/attendance/students', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          courseId: selectedCourse,
+          date: selectedDate,
+          students: students
+        })
+      })
+
+      const data = await response.json()
+      if (!data.success) {
+        throw new Error(data.error)
+      }
+    } catch (error) {
+      console.error('Error saving attendance:', error)
+      toast.error('Failed to save attendance')
+    }
+  }
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -123,18 +289,15 @@ export default function AttendancePage() {
     <div className="flex h-screen bg-background">
       {/* Sidebar */}
       <aside className="hidden sm:flex flex-col w-64 border-r border-border bg-sidebar">
-        <div className="flex items-center gap-2 px-4 py-6 border-b border-sidebar-border">
-          <div className="w-8 h-8 bg-sidebar-primary rounded-lg flex items-center justify-center text-sidebar-primary-foreground font-bold">
-            E
-          </div>
-          <span className="text-lg font-bold text-sidebar-foreground">EduHub</span>
+        <div className="flex items-center justify-center py-6 border-b border-sidebar-border">
+          <img src="/logo.png" alt="Orbit" className="w-24 h-24 object-contain" />
         </div>
         <SidebarNav items={sidebarItems} onLogout={() => router.push("/login")} />
       </aside>
 
       {/* Main Content */}
       <div className="flex flex-col flex-1 overflow-hidden">
-        <HeaderNav userName="Dr. Sarah Johnson" userRole="Teacher" onLogout={() => router.push("/login")} />
+        <HeaderNav userName={session?.user?.name || "Teacher"} userRole="Teacher" onLogout={() => router.push("/login")} />
 
         <main className="flex-1 overflow-auto bg-muted/20">
           <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto">
@@ -166,11 +329,18 @@ export default function AttendancePage() {
                         <div className="space-y-2">
                           <Label>Course / Class</Label>
                           <Select value={selectedCourse} onValueChange={setSelectedCourse}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectTrigger><SelectValue placeholder="Select a course" /></SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="web-dev">Web Development</SelectItem>
-                              <SelectItem value="data-struct">Data Structures</SelectItem>
-                              <SelectItem value="dbms">DBMS</SelectItem>
+                              {courses.map((course) => (
+                                <SelectItem key={course._id} value={course._id}>
+                                  {course.title}
+                                </SelectItem>
+                              ))}
+                              {courses.length === 0 && (
+                                <SelectItem value="no-courses" disabled>
+                                  No courses available
+                                </SelectItem>
+                              )}
                             </SelectContent>
                           </Select>
                         </div>
@@ -272,53 +442,60 @@ export default function AttendancePage() {
                     </div>
                   </CardHeader>
                   <div className="divide-y">
-                    {students.map((student) => (
-                      <div key={student.id} className="p-4 flex items-center justify-between gap-4 hover:bg-muted/10 transition-colors">
-                        <div className="flex items-center gap-4">
-                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary">
-                            {student.name.charAt(0)}
+                    {loading ? (
+                      <div className="p-8 text-center">
+                        <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2 text-primary" />
+                        <p className="text-muted-foreground">Loading students...</p>
+                      </div>
+                    ) : students.length > 0 ? (
+                      students.map((student) => (
+                        <div key={student.id} className="p-4 flex items-center justify-between gap-4 hover:bg-muted/10 transition-colors">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary">
+                              {student.name.charAt(0)}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-base">{student.name}</p>
+                              <p className="text-sm text-muted-foreground">ID: {student.rollNo}</p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-semibold text-base">{student.name}</p>
-                            <p className="text-sm text-muted-foreground">ID: {student.rollNo}</p>
-                          </div>
-                        </div>
 
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => markAttendance(student.id, 'present')}
-                            className={`
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => markAttendance(student.id, 'present')}
+                              className={`
                                                 flex items-center gap-2 px-4 py-2 rounded-lg border-2 font-medium transition-all duration-200 touch-manipulation
                                                 ${student.status === 'present'
-                                ? 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/40 dark:text-green-300 scale-105 shadow-sm'
-                                : 'bg-background border-border text-muted-foreground hover:border-green-300 hover:bg-green-50'
-                              }
+                                  ? 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/40 dark:text-green-300 scale-105 shadow-sm'
+                                  : 'bg-background border-border text-muted-foreground hover:border-green-300 hover:bg-green-50'
+                                }
                                             `}
-                          >
-                            <CheckCircle className={`w-5 h-5 ${student.status === 'present' ? 'fill-current' : ''}`} />
-                            <span>Present</span>
-                          </button>
+                            >
+                              <CheckCircle className={`w-5 h-5 ${student.status === 'present' ? 'fill-current' : ''}`} />
+                              <span>Present</span>
+                            </button>
 
-                          <button
-                            onClick={() => markAttendance(student.id, 'absent')}
-                            className={`
+                            <button
+                              onClick={() => markAttendance(student.id, 'absent')}
+                              className={`
                                                 flex items-center gap-2 px-4 py-2 rounded-lg border-2 font-medium transition-all duration-200 touch-manipulation
                                                 ${student.status === 'absent'
-                                ? 'bg-red-100 border-red-500 text-red-700 dark:bg-red-900/40 dark:text-red-300 scale-105 shadow-sm'
-                                : 'bg-background border-border text-muted-foreground hover:border-red-300 hover:bg-red-50'
-                              }
+                                  ? 'bg-red-100 border-red-500 text-red-700 dark:bg-red-900/40 dark:text-red-300 scale-105 shadow-sm'
+                                  : 'bg-background border-border text-muted-foreground hover:border-red-300 hover:bg-red-50'
+                                }
                                             `}
-                          >
-                            <XCircle className={`w-5 h-5 ${student.status === 'absent' ? 'fill-current' : ''}`} />
-                            <span>Absent</span>
-                          </button>
+                            >
+                              <XCircle className={`w-5 h-5 ${student.status === 'absent' ? 'fill-current' : ''}`} />
+                              <span>Absent</span>
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                    {students.length === 0 && (
+                      ))
+                    ) : (
                       <div className="p-8 text-center text-muted-foreground">
-                        <p>No students found for this batch.</p>
-                        <Button variant="link" onClick={() => document.getElementById('csv-upload')?.click()}>Import Student List</Button>
+                        <Users className="w-12 h-12 mx-auto mb-3 opacity-40" />
+                        <p className="font-medium mb-1">No students enrolled</p>
+                        <p className="text-sm">No students are currently enrolled in this course.</p>
                       </div>
                     )}
                   </div>
@@ -333,40 +510,7 @@ export default function AttendancePage() {
                     <CardDescription>View past attendance records and reports.</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="border rounded-md">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Date</TableHead>
-                            <TableHead>Course</TableHead>
-                            <TableHead>Batch</TableHead>
-                            <TableHead>Present</TableHead>
-                            <TableHead>Absent</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {[
-                            { date: '2024-03-10', course: 'Web Development', batch: 'Batch A', present: 45, absent: 2, status: 'Submitted' },
-                            { date: '2024-03-09', course: 'Web Development', batch: 'Batch A', present: 44, absent: 3, status: 'Submitted' },
-                            { date: '2024-03-08', course: 'Web Development', batch: 'Batch A', present: 47, absent: 0, status: 'Submitted' },
-                          ].map((row, i) => (
-                            <TableRow key={i}>
-                              <TableCell>{row.date}</TableCell>
-                              <TableCell>{row.course}</TableCell>
-                              <TableCell>{row.batch}</TableCell>
-                              <TableCell className="text-green-600 font-medium">{row.present}</TableCell>
-                              <TableCell className="text-red-600 font-medium">{row.absent}</TableCell>
-                              <TableCell><Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">{row.status}</Badge></TableCell>
-                              <TableCell className="text-right">
-                                <Button variant="ghost" size="sm">View</Button>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
+                    <AttendanceHistory courseId={selectedCourse} />
                   </CardContent>
                 </Card>
               </TabsContent>

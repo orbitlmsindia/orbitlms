@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { HeaderNav } from "@/components/header-nav"
 import { SidebarNav } from "@/components/sidebar-nav"
 import { Button } from "@/components/ui/button"
@@ -25,23 +26,39 @@ const sidebarItems = [
     { title: "Users", href: "/dashboard/admin/users", icon: "👥" },
     { title: "Courses", href: "/dashboard/admin/courses", icon: "📚" },
     { title: "Reports", href: "/dashboard/admin/reports", icon: "📊" },
-    { title: "Settings", href: "/dashboard/admin/settings", icon: "⚙️" },
     { title: "Analytics", href: "/dashboard/admin/analytics", icon: "📈" },
 ]
 
-const mockCourses = [
-    { id: "1", title: "Web Development Basics", category: "Development", students: 120, rating: 4.8, status: "published", created: "2024-01-05" },
-    { id: "2", title: "UX Design Fundamentals", category: "Design", students: 85, rating: 4.5, status: "draft", created: "2024-02-10" },
-    { id: "3", title: "Data Science with Python", category: "Science", students: 250, rating: 4.9, status: "published", created: "2023-11-20" },
-    { id: "4", title: "Marketing Strategy", category: "Business", students: 60, rating: 4.2, status: "published", created: "2024-01-15" },
-]
+// Mock data replaced by database integration
 
 export default function AdminCoursesPage() {
     const router = useRouter()
+    const { data: session } = useSession()
+    const [courses, setCourses] = useState<any[]>([])
+    const [isLoading, setIsLoading] = useState(true)
     const [searchTerm, setSearchTerm] = useState("")
     const [selectedCourse, setSelectedCourse] = useState<any>(null)
     const [isAuditOpen, setIsAuditOpen] = useState(false)
     const [isRulesOpen, setIsRulesOpen] = useState(false)
+
+    useEffect(() => {
+        fetchCourses()
+    }, [])
+
+    const fetchCourses = async () => {
+        setIsLoading(true)
+        try {
+            const res = await fetch('/api/courses')
+            const result = await res.json()
+            if (result.success) {
+                setCourses(result.data)
+            }
+        } catch (error) {
+            toast.error("Failed to sync curriculum vault")
+        } finally {
+            setIsLoading(false)
+        }
+    }
 
     const openAudit = (course: any) => {
         setSelectedCourse(course)
@@ -56,14 +73,14 @@ export default function AdminCoursesPage() {
     return (
         <div className="flex h-screen bg-background">
             <aside className="hidden lg:flex flex-col w-72 border-r border-border/40 bg-sidebar/30 backdrop-blur-xl">
-                <div className="flex items-center gap-4 px-10 py-12 border-b border-sidebar-border/40 group cursor-pointer" onClick={() => router.push("/")}>
-                    <span className="text-2xl font-black tracking-tighter text-sidebar-foreground group-hover:text-primary transition-colors italic">EduHub</span>
+                <div className="flex items-center justify-center py-8 border-b border-sidebar-border/40 group cursor-pointer" onClick={() => router.push("/")}>
+                    <img src="/logo.png" alt="Orbit" className="w-28 h-28 object-contain" />
                 </div>
                 <SidebarNav items={sidebarItems} onLogout={() => router.push("/login")} />
             </aside>
 
             <div className="flex flex-col flex-1 overflow-hidden">
-                <HeaderNav userName="Admin User" userRole="Administrator" onLogout={() => router.push("/login")} />
+                <HeaderNav userName={session?.user?.name || "Admin"} userRole="Administrator" onLogout={() => router.push("/login")} />
 
                 <main className="flex-1 overflow-auto bg-muted/20">
                     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
@@ -88,11 +105,16 @@ export default function AdminCoursesPage() {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {mockCourses.map((course) => (
+                            {isLoading ? (
+                                <div className="col-span-full py-20 text-center animate-pulse">
+                                    <div className="text-4xl mb-4">📚</div>
+                                    <p className="text-muted-foreground font-black tracking-widest uppercase text-xs">Synchronizing Academic Records...</p>
+                                </div>
+                            ) : courses.map((course) => (
                                 <Card
-                                    key={course.id}
+                                    key={course._id}
                                     className="group hover:border-primary/50 transition-all cursor-pointer"
-                                    onClick={() => router.push(`/dashboard/admin/courses/${course.id}`)}
+                                    onClick={() => router.push(`/dashboard/admin/courses/${course._id}`)}
                                 >
                                     <CardHeader>
                                         <div className="flex justify-between items-start mb-2">
@@ -111,7 +133,7 @@ export default function AdminCoursesPage() {
                                         <div className="grid grid-cols-2 gap-4 text-sm">
                                             <div className="flex items-center gap-2 text-muted-foreground">
                                                 <Users className="w-4 h-4" />
-                                                <span>{course.students} Students</span>
+                                                <span>{course.students?.length || 0} Students</span>
                                             </div>
                                             <div className="flex items-center gap-2 text-muted-foreground">
                                                 <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
@@ -152,24 +174,10 @@ export default function AdminCoursesPage() {
                         <DialogTitle className="text-3xl font-black tracking-tight">Access Audit History</DialogTitle>
                         <DialogDescription className="text-base font-medium">Viewing institutional modifications for <span className="text-foreground font-bold">{selectedCourse?.title}</span>.</DialogDescription>
                     </DialogHeader>
-                    <div className="py-8 space-y-6">
-                        {[
-                            { event: "Curriculum Updated", user: "Dr. Sarah Johnson", time: "2 hours ago", detail: "Added 3 new modules to Chapter 4" },
-                            { event: "Access Revoked", user: "System Admin", time: "1 day ago", detail: "Course moved to draft status for review" },
-                            { event: "Assessment Published", user: "Prof. James Wilson", time: "3 days ago", detail: "Final Exam MCQ set released" }
-                        ].map((log, i) => (
-                            <div key={i} className="flex gap-4 p-5 rounded-[1.5rem] bg-muted/30 border border-border/40 hover:bg-muted/50 transition-all">
-                                <div className="w-2 h-2 rounded-full bg-primary mt-2 flex-shrink-0 animate-pulse"></div>
-                                <div className="flex-1">
-                                    <div className="flex justify-between items-start mb-1">
-                                        <h4 className="font-black text-sm">{log.event}</h4>
-                                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{log.time}</span>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground font-medium mb-1">Modified by <span className="text-foreground font-bold">{log.user}</span></p>
-                                    <p className="text-xs text-muted-foreground/80 italic">"{log.detail}"</p>
-                                </div>
-                            </div>
-                        ))}
+                    <div className="py-8 space-y-6 flex flex-col items-center justify-center text-center text-muted-foreground">
+                        <History className="w-12 h-12 mb-4 opacity-20" />
+                        <p className="font-medium">No audit logs found</p>
+                        <p className="text-xs max-w-xs mx-auto">Audit logging will monitor changes to this course once active interactions begin.</p>
                     </div>
                 </DialogContent>
             </Dialog>

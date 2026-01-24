@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { HeaderNav } from "@/components/header-nav"
 import { SidebarNav } from "@/components/sidebar-nav"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,10 +11,10 @@ const sidebarItems = [
   { title: "Dashboard", href: "/dashboard/student", icon: "🏠" },
   { title: "My Courses", href: "/dashboard/student/courses", icon: "📚" },
   { title: "Assignments", href: "/dashboard/student/assignments", icon: "📋" },
-  { title: "Assessments", href: "/dashboard/student/assessments", icon: "✍️", badge: 3 },
-  { title: "AI Assistant", href: "/dashboard/student/ai-assistant", icon: "🤖" },
+  { title: "Quizzes", href: "/dashboard/student/assessments", icon: "✍️", badge: 3 },
+
+  { title: "Gamification", href: "/dashboard/student/gamification", icon: "🎮" },
   { title: "Progress", href: "/dashboard/student/progress", icon: "📊" },
-  { title: "Certificates", href: "/dashboard/student/certificates", icon: "🏆" },
 ]
 
 interface CourseProgress {
@@ -58,6 +59,7 @@ const courseProgressData: CourseProgress[] = [
 
 export default function ProgressPage() {
   const router = useRouter()
+  const { data: session } = useSession()
 
   const overallProgress = Math.round(
     courseProgressData.reduce((sum, c) => sum + c.progress, 0) / courseProgressData.length,
@@ -67,11 +69,8 @@ export default function ProgressPage() {
     <div className="flex h-screen bg-background">
       {/* Sidebar */}
       <aside className="hidden sm:flex flex-col w-64 border-r border-border bg-sidebar">
-        <div className="flex items-center gap-2 px-4 py-6 border-b border-sidebar-border">
-          <div className="w-8 h-8 bg-sidebar-primary rounded-lg flex items-center justify-center text-sidebar-primary-foreground font-bold">
-            E
-          </div>
-          <span className="text-lg font-bold text-sidebar-foreground">EduHub</span>
+        <div className="flex items-center justify-center py-6 border-b border-sidebar-border">
+          <img src="/logo.png" alt="Orbit" className="w-24 h-24 object-contain" />
         </div>
         <SidebarNav
           items={sidebarItems}
@@ -84,7 +83,7 @@ export default function ProgressPage() {
       {/* Main Content */}
       <div className="flex flex-col flex-1 overflow-hidden">
         <HeaderNav
-          userName="Alex Johnson"
+          userName={session?.user?.name || "Student"}
           userRole="Student"
           onLogout={() => {
             router.push("/login")

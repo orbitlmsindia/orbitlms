@@ -9,9 +9,10 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { toast } from "sonner"
-import { Upload, FileText, CheckCircle, Clock, AlertCircle, X, File as FileIcon, Download, RefreshCw } from "lucide-react"
+import { Upload, FileText, CheckCircle, Clock, AlertCircle, X, File as FileIcon, Download, RefreshCw, Search } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 // Sidebar items with the new Assignments module
@@ -19,10 +20,10 @@ const sidebarItems = [
     { title: "Dashboard", href: "/dashboard/student", icon: "🏠" },
     { title: "My Courses", href: "/dashboard/student/courses", icon: "📚" },
     { title: "Assignments", href: "/dashboard/student/assignments", icon: "📋" },
-    { title: "Assessments", href: "/dashboard/student/assessments", icon: "✍️", badge: 3 },
-    { title: "AI Assistant", href: "/dashboard/student/ai-assistant", icon: "🤖" },
+    { title: "Quizzes", href: "/dashboard/student/assessments", icon: "✍️", badge: 3 },
+
+    { title: "Gamification", href: "/dashboard/student/gamification", icon: "🎮" },
     { title: "Progress", href: "/dashboard/student/progress", icon: "📊" },
-    { title: "Certificates", href: "/dashboard/student/certificates", icon: "🏆" },
 ]
 
 interface Assignment {
@@ -81,14 +82,103 @@ const mockAssignments: Assignment[] = [
     }
 ]
 
+import { useSession } from "next-auth/react"
+import { useCallback, useEffect } from "react"
+
 export default function AssignmentsPage() {
+    const { data: session } = useSession()
+    const user = session?.user as any
     const router = useRouter()
+    const [assignments, setAssignments] = useState<Assignment[]>([])
     const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null)
     const [isDialogOpen, setIsDialogOpen] = useState(false)
     const [dragActive, setDragActive] = useState(false)
     const [uploadFile, setUploadFile] = useState<File | null>(null)
     const [uploadProgress, setUploadProgress] = useState(0)
     const [isUploading, setIsUploading] = useState(false)
+    const [loading, setLoading] = useState(true)
+    const [searchQuery, setSearchQuery] = useState("")
+
+    const fetchAssignmentsData = useCallback(async () => {
+        if (!user?.id) return
+
+        try {
+            setLoading(true)
+
+            // 1. Fetch Student Enrollments
+            const enrollRes = await fetch(`/api/enrollments?studentId=${user.id}`);
+            const enrollResult = await enrollRes.json();
+
+            let enrolledCourseIds: string[] = [];
+            if (enrollResult.success && enrollResult.data) {
+                enrolledCourseIds = enrollResult.data.map((e: any) => e.course?._id || e.course);
+            }
+
+            // 2. Fetch Assignments and Submissions
+            const [assignRes, subRes] = await Promise.all([
+                fetch('/api/assignments'), // Fetch all, then filter. Ideally Backend filters.
+                fetch(`/api/submissions?studentId=${user.id}`)
+            ]);
+
+            const assignResult = await assignRes.json();
+            const subResult = await subRes.json();
+
+            if (assignResult.success && subResult.success) {
+                const submissions = subResult.data || [];
+                let allAssignments = assignResult.data || [];
+
+                // Filter assignments by enrolled courses
+                if (enrolledCourseIds.length > 0) {
+                    allAssignments = allAssignments.filter((a: any) => {
+                        const courseId = a.course?._id || a.course;
+                        return enrolledCourseIds.includes(courseId);
+                    });
+                } else {
+                    // If no enrollments, show no assignments? Or show all public? 
+                    // Requirement says: "Show only assignments: Of the courses the student is enrolled in"
+                    // So if no enrollments, empty list.
+                    allAssignments = [];
+                }
+
+                const mappedAssignments = allAssignments.map((a: any) => {
+                    // Robust ID matching handling both string and object formats
+                    const submission = submissions.find((s: any) => {
+                        const assignmentId = s.assignment?._id || s.assignment
+                        return String(assignmentId) === String(a._id)
+                    })
+
+                    return {
+                        id: a._id,
+                        title: a.title,
+                        course: a.course?.title || "Unknown Course",
+                        dueDate: a.dueDate,
+                        // If submission exists, status is submitted (unless graded), otherwise pending
+                        status: submission ? (submission.status === 'graded' ? 'graded' : 'submitted') : 'pending',
+                        instructions: a.description || "No instructions provided.",
+                        maxMarks: a.maxMarks || 100, // Handle missing maxMarks
+                        marks: submission?.grade,
+                        teacherComments: submission?.feedback,
+                        // Handle submission file details
+                        submittedFile: submission ? {
+                            name: submission.fileUrl?.split('/').pop() || "submission.file",
+                            size: "N/A",
+                            date: submission.createdAt
+                        } : undefined
+                    }
+                })
+                setAssignments(mappedAssignments)
+            }
+        } catch (error) {
+            console.error("Error fetching assignments:", error)
+            toast.error("Failed to load assignments")
+        } finally {
+            setLoading(false)
+        }
+    }, [user?.id])
+
+    useEffect(() => {
+        fetchAssignmentsData()
+    }, [fetchAssignmentsData])
 
     const handleDrag = (e: React.DragEvent) => {
         e.preventDefault()
@@ -133,29 +223,58 @@ export default function AssignmentsPage() {
         setUploadProgress(0)
     }
 
-    const simulateUpload = () => {
-        if (!uploadFile) return
+    const handleUpload = async () => {
+        if (!uploadFile || !selectedAssignment || !user?.id) return
         setIsUploading(true)
 
-        // Simulate progress
-        let progress = 0
-        const interval = setInterval(() => {
-            progress += 10
-            setUploadProgress(progress)
-            if (progress >= 100) {
-                clearInterval(interval)
-                setIsUploading(false)
-                toast.success("Assignment uploaded successfully!")
+        try {
+            // In a real app, we would upload to S3/Cloudinary and get a URL
+            // For now, we simulate a URL
+            const simulatedUrl = `https://storage.eduhub.com/submissions/${uploadFile.name}`
 
-                // Update mock state (in a real app this would be an API call)
-                // Close dialog after a short delay
+            const res = await fetch('/api/submissions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    assignment: selectedAssignment.id,
+                    student: user.id,
+                    fileUrl: simulatedUrl,
+                    status: 'pending'
+                })
+            })
+
+            const result = await res.json()
+            if (result.success) {
+                toast.success("Assignment submitted successfully!")
+
+                try {
+                    await fetch('/api/notifications', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            user: user.id,
+                            title: "Assignment Submitted",
+                            message: `You have successfully submitted ${selectedAssignment.title}.`,
+                            type: 'success'
+                        })
+                    })
+                } catch (ignore) { }
+
+                fetchAssignmentsData()
                 setTimeout(() => {
                     setIsDialogOpen(false)
                     setUploadFile(null)
                     setUploadProgress(0)
+                    setIsUploading(false)
                 }, 1000)
+            } else {
+                toast.error(result.error || "Failed to submit assignment")
+                setIsUploading(false)
             }
-        }, 300)
+        } catch (error) {
+            toast.error("An error occurred during submission")
+            setIsUploading(false)
+        }
     }
 
     const getStatusColor = (status: Assignment['status']) => {
@@ -188,11 +307,8 @@ export default function AssignmentsPage() {
         <div className="flex h-screen bg-background">
             {/* Sidebar with Glassmorphism */}
             <aside className="hidden lg:flex flex-col w-72 border-r border-border/40 bg-sidebar/30 backdrop-blur-xl">
-                <div className="flex items-center gap-4 px-10 py-12 border-b border-sidebar-border/40 group cursor-pointer" onClick={() => router.push("/")}>
-                    <div className="w-12 h-12 bg-gradient-to-tr from-primary via-primary/80 to-secondary rounded-2xl flex items-center justify-center text-primary-foreground font-black shadow-[0_10px_20px_rgba(var(--primary-rgb),0.3)] group-hover:scale-110 transition-all duration-300">
-                        E
-                    </div>
-                    <span className="text-2xl font-black tracking-tighter text-sidebar-foreground group-hover:text-primary transition-colors">EduHub</span>
+                <div className="flex items-center justify-center py-8 border-b border-sidebar-border/40 group cursor-pointer" onClick={() => router.push("/")}>
+                    <img src="/logo.png" alt="Orbit" className="w-24 h-24 object-contain" />
                 </div>
                 <SidebarNav
                     items={sidebarItems}
@@ -205,7 +321,7 @@ export default function AssignmentsPage() {
             {/* Main Content Area */}
             <div className="flex flex-col flex-1 overflow-hidden">
                 <HeaderNav
-                    userName="Alex Johnson"
+                    userName={session?.user?.name || "Student"}
                     userRole="Student"
                     onLogout={() => {
                         router.push("/login")
@@ -214,9 +330,20 @@ export default function AssignmentsPage() {
 
                 <main className="flex-1 overflow-auto bg-gradient-to-br from-background via-primary/[0.02] to-background">
                     <div className="p-8 md:p-12 lg:p-16 max-w-7xl mx-auto space-y-12">
-                        <div className="relative">
-                            <h1 className="text-5xl md:text-6xl font-black text-foreground tracking-tighter mb-4 animate-in fade-in slide-in-from-left-4 duration-1000">Assignments</h1>
-                            <p className="text-xl text-muted-foreground font-medium animate-in fade-in slide-in-from-left-4 duration-1000 delay-100">Deliver your best work and track your progress in real-time.</p>
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                            <div>
+                                <h1 className="text-5xl md:text-6xl font-black text-foreground tracking-tighter mb-4 animate-in fade-in slide-in-from-left-4 duration-1000">Assignments</h1>
+                                <p className="text-xl text-muted-foreground font-medium animate-in fade-in slide-in-from-left-4 duration-1000 delay-100">Deliver your best work and track your progress in real-time.</p>
+                            </div>
+                            <div className="relative w-full md:w-96 animate-in fade-in slide-in-from-right-4 duration-1000 delay-200">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+                                <Input
+                                    placeholder="Search assignments or courses..."
+                                    className="pl-12 h-14 rounded-2xl bg-card/50 backdrop-blur-md border-border/50 text-base"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                />
+                            </div>
                             <div className="absolute top-0 right-0 hidden xl:block opacity-5 blur-[120px] pointer-events-none">
                                 <div className="w-96 h-96 bg-primary rounded-full"></div>
                             </div>
@@ -230,87 +357,114 @@ export default function AssignmentsPage() {
 
                             <TabsContent value="pending" className="animate-in fade-in slide-in-from-bottom-8 duration-1000">
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-                                    {mockAssignments.filter(a => a.status === 'pending').map((assignment, i) => (
-                                        <Card
-                                            key={assignment.id}
-                                            className="group relative overflow-hidden border-border/40 bg-card/40 backdrop-blur-md hover:bg-card/60 hover:shadow-[0_40px_80px_-20px_rgba(0,0,0,0.1)] hover:-translate-y-3 transition-all duration-500 cursor-pointer rounded-[2.5rem]"
-                                            style={{ animationDelay: `${i * 100}ms` }}
-                                            onClick={() => openAssignment(assignment)}
-                                        >
-                                            <div className="absolute top-0 right-0 w-40 h-40 bg-primary/5 rounded-full blur-[80px] -mr-20 -mt-20 group-hover:bg-primary/10 transition-all"></div>
-                                            <CardHeader className="pb-4 pt-10 px-10">
-                                                <div className="flex justify-between items-center mb-8">
-                                                    <Badge className={cn("px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.2em] border-none shadow-sm", getStatusColor(assignment.status))}>
-                                                        {assignment.status}
-                                                    </Badge>
-                                                    <span className="text-[10px] font-black text-primary px-4 py-1.5 bg-primary/10 rounded-full uppercase tracking-widest border border-primary/20">
-                                                        {assignment.maxMarks} Marks
-                                                    </span>
+                                    {loading ? (
+                                        Array(3).fill(0).map((_, i) => (
+                                            <Card key={i} className="rounded-[2.5rem] border-border/40 bg-card/40 backdrop-blur-md h-[400px] animate-pulse">
+                                                <CardContent className="p-10 space-y-4">
+                                                    <div className="h-6 w-24 bg-muted rounded-full" />
+                                                    <div className="h-10 w-full bg-muted rounded-xl" />
+                                                    <div className="h-4 w-3/4 bg-muted rounded-lg" />
+                                                    <div className="h-20 w-full bg-muted rounded-2xl" />
+                                                </CardContent>
+                                            </Card>
+                                        ))
+                                    ) : (
+                                        <>
+                                            {assignments
+                                                .filter(a => a.status === 'pending')
+                                                .filter(a =>
+                                                    a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                                    a.course.toLowerCase().includes(searchQuery.toLowerCase())
+                                                )
+                                                .map((assignment, i) => (
+                                                    <Card
+                                                        key={assignment.id}
+                                                        className="group relative overflow-hidden border-border/40 bg-card/40 backdrop-blur-md hover:bg-card/60 hover:shadow-[0_40px_80px_-20px_rgba(0,0,0,0.1)] hover:-translate-y-3 transition-all duration-500 cursor-pointer rounded-[2.5rem]"
+                                                        style={{ animationDelay: `${i * 100}ms` }}
+                                                        onClick={() => openAssignment(assignment)}
+                                                    >
+                                                        <div className="absolute top-0 right-0 w-40 h-40 bg-primary/5 rounded-full blur-[80px] -mr-20 -mt-20 group-hover:bg-primary/10 transition-all"></div>
+                                                        <CardHeader className="pb-4 pt-10 px-10">
+                                                            <div className="flex justify-between items-center mb-8">
+                                                                <Badge className={cn("px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.2em] border-none shadow-sm", getStatusColor(assignment.status))}>
+                                                                    {assignment.status}
+                                                                </Badge>
+                                                                <span className="text-[10px] font-black text-primary px-4 py-1.5 bg-primary/10 rounded-full uppercase tracking-widest border border-primary/20">
+                                                                    {assignment.maxMarks} Marks
+                                                                </span>
+                                                            </div>
+                                                            <CardTitle className="text-3xl font-black tracking-tight group-hover:text-primary transition-colors pr-4 leading-tight">{assignment.title}</CardTitle>
+                                                            <CardDescription className="text-xs font-black text-muted-foreground/60 uppercase tracking-widest mt-2">{assignment.course}</CardDescription>
+                                                        </CardHeader>
+                                                        <CardContent className="px-10 pb-6">
+                                                            <div className="flex items-center text-sm font-black text-destructive mb-8 bg-destructive/5 px-5 py-3 rounded-2xl border border-destructive/10 inline-flex">
+                                                                <AlertCircle className="w-5 h-5 mr-3" />
+                                                                Due {new Date(assignment.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                                            </div>
+                                                            <p className="text-muted-foreground/80 line-clamp-3 font-medium leading-relaxed text-lg">{assignment.instructions}</p>
+                                                        </CardContent>
+                                                        <CardFooter className="px-10 pb-10 pt-4">
+                                                            <Button className="w-full h-14 rounded-2xl font-black text-sm bg-primary text-primary-foreground hover:bg-primary/90 shadow-xl hover:shadow-2xl transition-all group/btn" variant="default">
+                                                                Begin Task <span className="ml-3 group-hover/btn:translate-x-2 transition-transform">→</span>
+                                                            </Button>
+                                                        </CardFooter>
+                                                    </Card>
+                                                ))}
+                                            {assignments.filter(a => a.status === 'pending').length === 0 && !loading && (
+                                                <div className="col-span-full py-32 text-center">
+                                                    <div className="text-8xl mb-6 opacity-20">🎉</div>
+                                                    <p className="text-2xl font-black text-muted-foreground tracking-tight">You're all caught up! Enjoy your free time.</p>
                                                 </div>
-                                                <CardTitle className="text-3xl font-black tracking-tight group-hover:text-primary transition-colors pr-4 leading-tight">{assignment.title}</CardTitle>
-                                                <CardDescription className="text-xs font-black text-muted-foreground/60 uppercase tracking-widest mt-2">{assignment.course}</CardDescription>
-                                            </CardHeader>
-                                            <CardContent className="px-10 pb-6">
-                                                <div className="flex items-center text-sm font-black text-destructive mb-8 bg-destructive/5 px-5 py-3 rounded-2xl border border-destructive/10 inline-flex">
-                                                    <AlertCircle className="w-5 h-5 mr-3" />
-                                                    Due {new Date(assignment.dueDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                                                </div>
-                                                <p className="text-muted-foreground/80 line-clamp-3 font-medium leading-relaxed text-lg">{assignment.instructions}</p>
-                                            </CardContent>
-                                            <CardFooter className="px-10 pb-10 pt-4">
-                                                <Button className="w-full h-14 rounded-2xl font-black text-sm bg-primary text-primary-foreground hover:bg-primary/90 shadow-xl hover:shadow-2xl transition-all group/btn" variant="default">
-                                                    Begin Task <span className="ml-3 group-hover/btn:translate-x-2 transition-transform">→</span>
-                                                </Button>
-                                            </CardFooter>
-                                        </Card>
-                                    ))}
-                                    {mockAssignments.filter(a => a.status === 'pending').length === 0 && (
-                                        <div className="col-span-full py-32 text-center">
-                                            <div className="text-8xl mb-6 opacity-20">🎉</div>
-                                            <p className="text-2xl font-black text-muted-foreground tracking-tight">You're all caught up! Enjoy your free time.</p>
-                                        </div>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                             </TabsContent>
 
                             <TabsContent value="submitted" className="animate-in fade-in slide-in-from-bottom-8 duration-1000">
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
-                                    {mockAssignments.filter(a => a.status !== 'pending').map((assignment, i) => (
-                                        <Card
-                                            key={assignment.id}
-                                            className="group relative overflow-hidden border-border/40 bg-card/20 backdrop-blur-md hover:bg-card/40 hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 cursor-pointer rounded-[2.5rem]"
-                                            style={{ animationDelay: `${i * 100}ms` }}
-                                            onClick={() => openAssignment(assignment)}
-                                        >
-                                            <CardHeader className="pb-4 pt-10 px-10">
-                                                <div className="flex justify-between items-center mb-8">
-                                                    <Badge className={cn("px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.2em] border-none", getStatusColor(assignment.status))}>
-                                                        {assignment.status}
-                                                    </Badge>
-                                                    {assignment.marks !== undefined && (
-                                                        <div className="text-right">
-                                                            <div className="text-3xl font-black text-primary tracking-tighter leading-none">{assignment.marks}</div>
-                                                            <div className="text-[10px] font-black text-muted-foreground/60 uppercase tracking-widest text-center mt-1">/ {assignment.maxMarks}</div>
+                                    {assignments
+                                        .filter(a => a.status !== 'pending')
+                                        .filter(a =>
+                                            a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                            a.course.toLowerCase().includes(searchQuery.toLowerCase())
+                                        )
+                                        .map((assignment, i) => (
+                                            <Card
+                                                key={assignment.id}
+                                                className="group relative overflow-hidden border-border/40 bg-card/20 backdrop-blur-md hover:bg-card/40 hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 cursor-pointer rounded-[2.5rem]"
+                                                style={{ animationDelay: `${i * 100}ms` }}
+                                                onClick={() => openAssignment(assignment)}
+                                            >
+                                                <CardHeader className="pb-4 pt-10 px-10">
+                                                    <div className="flex justify-between items-center mb-8">
+                                                        <Badge className={cn("px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-[0.2em] border-none", getStatusColor(assignment.status))}>
+                                                            {assignment.status}
+                                                        </Badge>
+                                                        {assignment.marks !== undefined && (
+                                                            <div className="text-right">
+                                                                <div className="text-3xl font-black text-primary tracking-tighter leading-none">{assignment.marks}</div>
+                                                                <div className="text-[10px] font-black text-muted-foreground/60 uppercase tracking-widest text-center mt-1">/ {assignment.maxMarks}</div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <CardTitle className="text-2xl font-black tracking-tight leading-tight">{assignment.title}</CardTitle>
+                                                    <CardDescription className="text-[10px] font-black text-muted-foreground/60 uppercase tracking-[0.2em] mt-2">{assignment.course}</CardDescription>
+                                                </CardHeader>
+                                                <CardContent className="px-10 pb-10">
+                                                    <div className="flex items-center text-sm font-black text-muted-foreground/80 mb-8 bg-muted/30 px-5 py-3 rounded-2xl border border-border/40 inline-flex">
+                                                        <CheckCircle className="w-5 h-5 mr-3 text-secondary" />
+                                                        Graded on {new Date(assignment.submittedFile?.date || Date.now()).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                                    </div>
+                                                    {assignment.teacherComments && (
+                                                        <div className="mt-4 bg-primary/[0.03] p-6 rounded-[2rem] text-sm font-bold italic border-l-4 border-primary/30 relative text-muted-foreground/90">
+                                                            <span className="absolute -top-4 -left-2 text-6xl text-primary/10 opacity-50 font-serif">"</span>
+                                                            {assignment.teacherComments}
                                                         </div>
                                                     )}
-                                                </div>
-                                                <CardTitle className="text-2xl font-black tracking-tight leading-tight">{assignment.title}</CardTitle>
-                                                <CardDescription className="text-[10px] font-black text-muted-foreground/60 uppercase tracking-[0.2em] mt-2">{assignment.course}</CardDescription>
-                                            </CardHeader>
-                                            <CardContent className="px-10 pb-10">
-                                                <div className="flex items-center text-sm font-black text-muted-foreground/80 mb-8 bg-muted/30 px-5 py-3 rounded-2xl border border-border/40 inline-flex">
-                                                    <CheckCircle className="w-5 h-5 mr-3 text-secondary" />
-                                                    Graded on {new Date(assignment.submittedFile?.date || Date.now()).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                                                </div>
-                                                {assignment.teacherComments && (
-                                                    <div className="mt-4 bg-primary/[0.03] p-6 rounded-[2rem] text-sm font-bold italic border-l-4 border-primary/30 relative text-muted-foreground/90">
-                                                        <span className="absolute -top-4 -left-2 text-6xl text-primary/10 opacity-50 font-serif">"</span>
-                                                        {assignment.teacherComments}
-                                                    </div>
-                                                )}
-                                            </CardContent>
-                                        </Card>
-                                    ))}
+                                                </CardContent>
+                                            </Card>
+                                        ))}
                                 </div>
                             </TabsContent>
                         </Tabs>
@@ -454,7 +608,7 @@ export default function AssignmentsPage() {
                                         <div className="flex justify-end gap-3 pt-2">
                                             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Close</Button>
                                             {uploadFile && (
-                                                <Button onClick={simulateUpload} disabled={isUploading}>
+                                                <Button onClick={handleUpload} disabled={isUploading}>
                                                     {isUploading ? (
                                                         <>
                                                             <RefreshCw className="mr-2 h-4 w-4 animate-spin" />

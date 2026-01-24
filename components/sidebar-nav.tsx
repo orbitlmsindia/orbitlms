@@ -4,10 +4,12 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 
+import { LogOut } from "lucide-react"
+
 interface NavItem {
   title: string
   href: string
-  icon: string
+  icon: React.ReactNode
   badge?: number
 }
 
@@ -39,7 +41,7 @@ export function SidebarNav({ items, onLogout }: SidebarNavProps) {
                 <div className="absolute left-0 top-1/4 bottom-1/4 w-1 bg-primary-foreground rounded-full"></div>
               )}
               <span className={cn(
-                "text-2xl transition-transform duration-300 group-hover:scale-120",
+                "text-2xl transition-transform duration-300 group-hover:scale-120 flex items-center justify-center",
                 isActive ? "text-primary-foreground" : "group-hover:text-primary"
               )}>
                 {item.icon}
@@ -63,7 +65,7 @@ export function SidebarNav({ items, onLogout }: SidebarNavProps) {
           onClick={onLogout}
           className="group w-full flex items-center gap-4 px-5 py-3.5 rounded-2xl text-sm font-black text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-all duration-300"
         >
-          <span className="text-2xl group-hover:rotate-12 transition-transform">🚪</span>
+          <span className="text-2xl group-hover:rotate-12 transition-transform flex items-center justify-center"><LogOut className="w-6 h-6" /></span>
           <span>Sign Out</span>
         </button>
       </div>

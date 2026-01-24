@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { HeaderNav } from "@/components/header-nav"
 import { SidebarNav } from "@/components/sidebar-nav"
 import { Button } from "@/components/ui/button"
@@ -10,6 +11,17 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Plus, Search, MoreVertical, Edit, Trash, Eye, FileText, Users, BarChart3, Upload } from "lucide-react"
+import { toast } from "sonner"
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 const sidebarItems = [
     { title: "Dashboard", href: "/dashboard/teacher", icon: "🏠" },
@@ -32,47 +44,86 @@ interface Course {
     thumbnail: string
 }
 
-const mockCourses: Course[] = [
-    {
-        id: "1",
-        title: "Web Development Basics",
-        category: "Web Development",
-        level: "Beginner",
-        lessons: 12,
-        students: 45,
-        status: "published",
-        lastUpdated: "2024-03-01",
-        thumbnail: "🌐",
-    },
-    {
-        id: "2",
-        title: "Advanced React Patterns",
-        category: "Programming",
-        level: "Advanced",
-        lessons: 8,
-        students: 32,
-        status: "published",
-        lastUpdated: "2024-02-25",
-        thumbnail: "⚛️",
-    },
-    {
-        id: "3",
-        title: "Backend with Node.js",
-        category: "Backend",
-        level: "Intermediate",
-        lessons: 15,
-        students: 0,
-        status: "draft",
-        lastUpdated: "2024-03-05",
-        thumbnail: "🟢",
-    },
-]
-
 export default function CoursesPage() {
     const router = useRouter()
-    const [searchQuery, setSearchQuery] = useState("")
 
-    const filteredCourses = mockCourses.filter((course) =>
+    const { data: session } = useSession()
+    const [searchQuery, setSearchQuery] = useState("")
+    const [courses, setCourses] = useState<Course[]>([])
+    const [loading, setLoading] = useState(true)
+    const [deleteCourseId, setDeleteCourseId] = useState<string | null>(null)
+
+    useEffect(() => {
+        const fetchCourses = async () => {
+            if (!session?.user) return
+            try {
+                const res = await fetch('/api/courses')
+                const data = await res.json()
+                if (data.success) {
+                    const mappedCourses = data.data.map((c: any) => ({
+                        id: c._id,
+                        title: c.title,
+                        category: c.category || 'General',
+                        level: c.level || 'Beginner',
+                        lessons: c.chapters?.reduce((acc: number, ch: any) => acc + (ch.lessons?.length || 0), 0) || 0,
+                        students: c.students?.length || 0,
+                        status: c.status || 'draft',
+                        lastUpdated: new Date(c.updatedAt).toLocaleDateString(),
+                        thumbnail: c.image || (c.category === 'Web Development' ? "🌐" : "📚"), // Fallback icon
+                    }))
+                    setCourses(mappedCourses)
+                }
+            } catch (error) {
+                console.error("Failed to fetch courses", error)
+            } finally {
+                setLoading(false)
+            }
+        }
+        fetchCourses()
+    }, [session])
+
+    const handlePublish = async (courseId: string) => {
+        try {
+            const res = await fetch(`/api/courses/${courseId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'published' })
+            })
+            const data = await res.json()
+            if (data.success) {
+                toast.success("Course published successfully")
+                setCourses(prev => prev.map(c => c.id === courseId ? { ...c, status: 'published' } : c))
+            } else {
+                toast.error(data.error || "Failed to publish")
+            }
+        } catch (error) {
+            toast.error("Something went wrong")
+        }
+    }
+
+    const handleDelete = async () => {
+        if (!deleteCourseId) return
+
+        try {
+            const res = await fetch(`/api/courses/${deleteCourseId}`, {
+                method: 'DELETE',
+            })
+            const data = await res.json()
+
+            if (data.success) {
+                toast.success("Course deleted successfully")
+                setCourses(prev => prev.filter(c => c.id !== deleteCourseId))
+            } else {
+                toast.error(data.error || "Failed to delete course")
+            }
+        } catch (error) {
+            toast.error("Failed to delete course")
+        } finally {
+            setDeleteCourseId(null)
+        }
+    }
+
+    const filteredCourses = courses.filter((course) =>
         course.title.toLowerCase().includes(searchQuery.toLowerCase())
     )
 
@@ -89,11 +140,8 @@ export default function CoursesPage() {
         <div className="flex h-screen bg-background">
             {/* Sidebar */}
             <aside className="hidden sm:flex flex-col w-64 border-r border-border bg-sidebar">
-                <div className="flex items-center gap-2 px-4 py-6 border-b border-sidebar-border">
-                    <div className="w-8 h-8 bg-sidebar-primary rounded-lg flex items-center justify-center text-sidebar-primary-foreground font-bold">
-                        E
-                    </div>
-                    <span className="text-lg font-bold text-sidebar-foreground">EduHub</span>
+                <div className="flex items-center justify-center py-6 border-b border-sidebar-border">
+                    <img src="/logo.png" alt="Orbit" className="w-24 h-24 object-contain" />
                 </div>
                 <SidebarNav
                     items={sidebarItems}
@@ -106,7 +154,7 @@ export default function CoursesPage() {
             {/* Main Content */}
             <div className="flex flex-col flex-1 overflow-hidden">
                 <HeaderNav
-                    userName="Dr. Sarah Johnson"
+                    userName={session?.user?.name || "Teacher"}
                     userRole="Teacher"
                     onLogout={() => {
                         router.push("/login")
@@ -154,10 +202,18 @@ export default function CoursesPage() {
                                                     <DropdownMenuItem onClick={() => router.push(`/dashboard/teacher/courses/create?id=${course.id}`)}>
                                                         <Edit className="mr-2 h-4 w-4" /> Edit
                                                     </DropdownMenuItem>
-                                                    <DropdownMenuItem>
+                                                    {course.status === 'draft' && (
+                                                        <DropdownMenuItem onClick={() => handlePublish(course.id)}>
+                                                            <Upload className="mr-2 h-4 w-4" /> Publish
+                                                        </DropdownMenuItem>
+                                                    )}
+                                                    <DropdownMenuItem onClick={() => router.push(`/dashboard/teacher/courses/preview/${course.id}`)}>
                                                         <Eye className="mr-2 h-4 w-4" /> Preview
                                                     </DropdownMenuItem>
-                                                    <DropdownMenuItem className="text-destructive">
+                                                    <DropdownMenuItem
+                                                        className="text-destructive focus:text-destructive"
+                                                        onClick={() => setDeleteCourseId(course.id)}
+                                                    >
                                                         <Trash className="mr-2 h-4 w-4" /> Delete
                                                     </DropdownMenuItem>
                                                 </DropdownMenuContent>
@@ -197,6 +253,24 @@ export default function CoursesPage() {
                     </div>
                 </main>
             </div>
+
+            <AlertDialog open={!!deleteCourseId} onOpenChange={(open) => !open && setDeleteCourseId(null)}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            This action cannot be undone. This will permanently delete the course
+                            and remove all student enrollments associated with it.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     )
 }

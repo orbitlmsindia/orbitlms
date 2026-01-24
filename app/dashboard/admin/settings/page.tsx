@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { HeaderNav } from "@/components/header-nav"
 import { SidebarNav } from "@/components/sidebar-nav"
 import { Button } from "@/components/ui/button"
@@ -15,25 +16,24 @@ const sidebarItems = [
     { title: "Users", href: "/dashboard/admin/users", icon: "👥" },
     { title: "Courses", href: "/dashboard/admin/courses", icon: "📚" },
     { title: "Reports", href: "/dashboard/admin/reports", icon: "📊" },
-    { title: "Settings", href: "/dashboard/admin/settings", icon: "⚙️" },
     { title: "Analytics", href: "/dashboard/admin/analytics", icon: "📈" },
 ]
 
 export default function AdminSettingsPage() {
     const router = useRouter()
+    const { data: session } = useSession()
 
     return (
         <div className="flex h-screen bg-background">
             <aside className="hidden sm:flex flex-col w-64 border-r border-border bg-sidebar">
-                <div className="flex items-center gap-2 px-4 py-6 border-b border-sidebar-border">
-                    <div className="w-8 h-8 bg-sidebar-primary rounded-lg flex items-center justify-center text-sidebar-primary-foreground font-bold">E</div>
-                    <span className="text-lg font-bold text-sidebar-foreground">EduHub</span>
+                <div className="flex items-center justify-center py-6 border-b border-sidebar-border">
+                    <img src="/logo.png" alt="Orbit" className="w-24 h-24 object-contain" />
                 </div>
                 <SidebarNav items={sidebarItems} onLogout={() => router.push("/login")} />
             </aside>
 
             <div className="flex flex-col flex-1 overflow-hidden">
-                <HeaderNav userName="Admin User" userRole="Administrator" onLogout={() => router.push("/login")} />
+                <HeaderNav userName={session?.user?.name || "Admin"} userRole="Administrator" onLogout={() => router.push("/login")} />
 
                 <main className="flex-1 overflow-auto bg-muted/20">
                     <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto">

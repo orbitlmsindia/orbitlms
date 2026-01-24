@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { HeaderNav } from "@/components/header-nav"
 import { SidebarNav } from "@/components/sidebar-nav"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -18,25 +19,33 @@ const sidebarItems = [
 
 export default function ManagerCertificatesPage() {
     const router = useRouter()
+    const { data: session } = useSession()
 
-    const issuedCertificates = [
-        { name: "Alex Johnson", course: "Web Architecture", date: "Mar 15, 2024", id: "CERT-982-12" },
-        { name: "Sarah Smith", course: "UX Strategic Design", date: "Mar 12, 2024", id: "CERT-872-99" },
-        { name: "Emily Watson", course: "Product Management", date: "Mar 05, 2024", id: "CERT-772-54" },
-    ]
+    // Placeholder for real data fetching
+    const issuedCertificates: any[] = []
 
     return (
         <div className="flex h-screen bg-background">
             <aside className="hidden sm:flex flex-col w-64 border-r border-border bg-sidebar">
-                <div className="flex items-center gap-2 px-4 py-6 border-b border-sidebar-border">
-                    <div className="w-8 h-8 bg-sidebar-primary rounded-lg flex items-center justify-center text-sidebar-primary-foreground font-bold">E</div>
-                    <span className="text-lg font-bold text-sidebar-foreground">EduHub</span>
+                <div className="flex items-center justify-center py-6 border-b border-sidebar-border">
+                    <img src="/logo.png" alt="Orbit" className="w-24 h-24 object-contain" />
                 </div>
-                <SidebarNav items={sidebarItems} onLogout={() => router.push("/login")} />
+                <SidebarNav
+                    items={sidebarItems}
+                    onLogout={() => {
+                        router.push("/login")
+                    }}
+                />
             </aside>
 
             <div className="flex flex-col flex-1 overflow-hidden">
-                <HeaderNav userName="Manager User" userRole="Manager" onLogout={() => router.push("/login")} />
+                <HeaderNav
+                    userName={session?.user?.name || "Manager"}
+                    userRole="Manager"
+                    onLogout={() => {
+                        router.push("/login")
+                    }}
+                />
                 <main className="flex-1 overflow-auto bg-muted/20">
                     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
                         <h1 className="text-3xl font-bold mb-8">Certificate Management</h1>
@@ -54,28 +63,38 @@ export default function ManagerCertificatesPage() {
                             </CardContent>
                         </Card>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {issuedCertificates.map((cert, i) => (
-                                <Card key={i} className="hover:border-primary/50 transition-all border-l-4 border-l-primary/20">
-                                    <CardHeader className="pb-3">
-                                        <Award className="w-8 h-8 text-primary mb-2" />
-                                        <CardTitle className="text-base truncate">{cert.course}</CardTitle>
-                                        <CardDescription>Issued to <span className="text-foreground font-medium">{cert.name}</span></CardDescription>
-                                    </CardHeader>
-                                    <CardContent className="space-y-4">
-                                        <div className="p-2 rounded bg-muted text-[10px] font-mono text-center border">
-                                            ID: {cert.id}
-                                        </div>
-                                        <div className="flex justify-between items-center text-xs text-muted-foreground">
-                                            <span>Date: {cert.date}</span>
-                                            <Button variant="link" className="p-0 h-auto gap-1 text-primary">
-                                                <ShieldCheck className="w-3 h-3" /> Validate
-                                            </Button>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </div>
+                        {issuedCertificates.length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                {issuedCertificates.map((cert, i) => (
+                                    <Card key={i} className="hover:border-primary/50 transition-all border-l-4 border-l-primary/20">
+                                        <CardHeader className="pb-3">
+                                            <Award className="w-8 h-8 text-primary mb-2" />
+                                            <CardTitle className="text-base truncate">{cert.course}</CardTitle>
+                                            <CardDescription>
+                                                Issued to <span className="text-foreground font-medium">{cert.name}</span>
+                                            </CardDescription>
+                                        </CardHeader>
+                                        <CardContent className="space-y-4">
+                                            <div className="p-2 rounded bg-muted text-[10px] font-mono text-center border">
+                                                ID: {cert.id}
+                                            </div>
+                                            <div className="flex justify-between items-center text-xs text-muted-foreground">
+                                                <span>Date: {cert.date}</span>
+                                                <Button variant="link" className="p-0 h-auto gap-1 text-primary">
+                                                    <ShieldCheck className="w-3 h-3" /> Validate
+                                                </Button>
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="flex flex-col items-center justify-center py-20 text-center text-muted-foreground">
+                                <Award className="w-12 h-12 mb-4 opacity-20" />
+                                <p className="text-lg font-medium">No certificates issued yet</p>
+                                <p className="text-sm">Issued certificates will appear here.</p>
+                            </div>
+                        )}
                     </div>
                 </main>
             </div>

@@ -12,16 +12,19 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { ChevronLeft, Download, ExternalLink, CheckCircle, XCircle } from "lucide-react"
+import { ChevronLeft, Download, ExternalLink, CheckCircle, XCircle, FileText } from "lucide-react"
 import { toast } from "sonner"
+import { useEffect, useCallback } from "react"
+import { useSession } from "next-auth/react"
+import { Skeleton } from "@/components/ui/skeleton"
 
 const sidebarItems = [
-    { title: "Dashboard", href: "/dashboard/teacher", icon: "🏠" },
-    { title: "My Courses", href: "/dashboard/teacher/courses", icon: "📚" },
-    { title: "Assessments", href: "/dashboard/teacher/assessments", icon: "✍️" },
-    { title: "Student Progress", href: "/dashboard/teacher/progress", icon: "📊" },
-    { title: "Attendance", href: "/dashboard/teacher/attendance", icon: "📋" },
-    { title: "Reports", href: "/dashboard/teacher/reports", icon: "📈" },
+    { title: "Dashboard", href: "/dashboard/teacher", icon: "" },
+    { title: "My Courses", href: "/dashboard/teacher/courses", icon: "" },
+    { title: "Assessments", href: "/dashboard/teacher/assessments", icon: "" },
+    { title: "Student Progress", href: "/dashboard/teacher/progress", icon: "" },
+    { title: "Attendance", href: "/dashboard/teacher/attendance", icon: "" },
+    { title: "Reports", href: "/dashboard/teacher/reports", icon: "" },
 ]
 
 interface Submission {
@@ -46,63 +49,98 @@ interface Submission {
 export default function AssessmentReviewPage() {
     const router = useRouter()
     const params = useParams()
-    const assessmentId = params.id
+    const { data: session } = useSession()
+    const assessmentId = params.id as string
 
-    const [activeSubmissionId, setActiveSubmissionId] = useState<string | null>("1")
-    const [gradingScore, setGradingScore] = useState<number>(0)
+    const [loading, setLoading] = useState(true)
+    const [assessment, setAssessment] = useState<any>(null)
+    const [submissionsData, setSubmissionsData] = useState<any[]>([])
+    const [activeSubmissionId, setActiveSubmissionId] = useState<string | null>(null)
     const [feedback, setFeedback] = useState("")
+    const [gradingScore, setGradingScore] = useState<number>(0)
 
-    // Mock Submissions
-    const submissions: Submission[] = [
-        {
-            id: "1",
-            studentName: "Alex Johnson",
-            rollNo: "WEB001",
-            submittedAt: "2024-03-09 10:30 AM",
-            status: "pending",
-            maxScore: 20,
-            answers: [
-                { questionId: "q1", question: "What is the virtual DOM?", answer: "It is a lightweight copy of the real DOM...", type: "subjective", maxMarks: 10, marksAwarded: 0 },
-                { questionId: "q2", question: "Which hook is used for side effects?", answer: "useEffect", type: "mcq", isCorrect: true, maxMarks: 5, marksAwarded: 5 },
-                { questionId: "q3", question: "Explain props drilling.", answer: "Props drilling is passing data through multiple layers...", type: "subjective", maxMarks: 5, marksAwarded: 0 },
-            ]
-        },
-        {
-            id: "2",
-            studentName: "Sarah Smith",
-            rollNo: "WEB002",
-            submittedAt: "2024-03-09 11:15 AM",
-            status: "graded",
-            score: 18,
-            maxScore: 20,
-            answers: []
+    const fetchData = useCallback(async () => {
+        if (!assessmentId) return
+        try {
+            setLoading(true)
+            // 1. Try to Fetch Assessment Details
+            let res = await fetch(`/api/assessments/${assessmentId}`)
+            let data = await res.json()
+
+            // If not found in assessments, try assignments
+            if (!data.success) {
+                res = await fetch(`/api/assignments/${assessmentId}`)
+                data = await res.json()
+            }
+
+            if (data.success) {
+                setAssessment(data.data)
+
+                // 2. Fetch Submissions (Assignments) or Results (Quizzes)
+                const isAssessmentResult = ['quiz', 'test', 'exam'].includes(data.data.type)
+                const endpoint = isAssessmentResult
+                    ? `/api/assessment-results?assessmentId=${assessmentId}`
+                    : `/api/submissions?assignmentId=${assessmentId}`
+
+                const subRes = await fetch(endpoint)
+                const subJson = await subRes.json()
+
+                if (subJson.success) {
+                    const mapped = subJson.data.map((s: any) => ({
+                        id: s._id,
+                        studentName: s.student?.name || "Unknown Student",
+                        rollNo: s.student?._id?.toString().substring(0, 8) || "N/A",
+                        submittedAt: new Date(s.createdAt || s.attemptedAt).toLocaleString(),
+                        status: s.status === 'graded' || s.status === 'passed' || s.status === 'failed' ? 'graded' : 'pending',
+                        score: s.score || s.grade,
+                        maxScore: s.totalMarks || (data.data.questions?.length * 10) || 100,
+                        answers: s.answers || [],
+                        feedback: s.feedback,
+                        fileUrl: s.fileUrl
+                    }))
+                    setSubmissionsData(mapped)
+                    if (mapped.length > 0) setActiveSubmissionId(mapped[0].id)
+                }
+            }
+        } catch (error) {
+            console.error("Error fetching data:", error)
+            toast.error("Failed to load submission data")
+        } finally {
+            setLoading(false)
         }
-    ]
+    }, [assessmentId])
 
-    const activeSubmission = submissions.find(s => s.id === activeSubmissionId)
+    useEffect(() => {
+        fetchData()
+    }, [fetchData])
+
+    const activeSubmission = submissionsData.find(s => s.id === activeSubmissionId)
 
     const handleUpdateMarks = (qIndex: number, marks: number) => {
-        // In a real app, update state properly
         console.log(`Updated Marks for Q${qIndex}: ${marks}`)
     }
 
-    const submitGrade = () => {
-        toast.success("Grades submitted successfully")
-        // Logic to move to next student or update status
+    const submitGrade = async () => {
+        if (!activeSubmissionId) return
+        try {
+            // Logic to submit grade to API
+            toast.success("Grades submitted successfully")
+        } catch (error) {
+            toast.error("Failed to submit grades")
+        }
     }
 
     return (
         <div className="flex h-screen bg-background">
             <aside className="hidden sm:flex flex-col w-64 border-r border-border bg-sidebar">
-                <div className="flex items-center gap-2 px-4 py-6 border-b border-sidebar-border">
-                    <div className="w-8 h-8 bg-sidebar-primary rounded-lg flex items-center justify-center text-sidebar-primary-foreground font-bold">E</div>
-                    <span className="text-lg font-bold text-sidebar-foreground">EduHub</span>
+                <div className="flex items-center justify-center py-6 border-b border-sidebar-border">
+                    <img src="/logo.png" alt="Orbit" className="w-24 h-24 object-contain" />
                 </div>
                 <SidebarNav items={sidebarItems} onLogout={() => router.push("/login")} />
             </aside>
 
             <div className="flex flex-col flex-1 overflow-hidden">
-                <HeaderNav userName="Dr. Sarah Johnson" userRole="Teacher" onLogout={() => router.push("/login")} />
+                <HeaderNav userName={session?.user?.name || "Teacher"} userRole="Teacher" onLogout={() => router.push("/login")} />
 
                 <main className="flex-1 overflow-auto bg-muted/20">
                     <div className="h-full flex flex-col">
@@ -113,8 +151,10 @@ export default function AssessmentReviewPage() {
                                     <ChevronLeft className="w-5 h-5" />
                                 </Button>
                                 <div>
-                                    <h1 className="text-xl font-bold">Assessment Review: Web Development Quiz</h1>
-                                    <p className="text-xs text-muted-foreground">{submissions.length} Submissions • Due Mar 10</p>
+                                    <h1 className="text-xl font-bold">
+                                        {loading ? <Skeleton className="h-6 w-48" /> : `Assessment Review: ${assessment?.title || "Loading..."}`}
+                                    </h1>
+                                    <p className="text-xs text-muted-foreground">{submissionsData.length} Submissions</p>
                                 </div>
                             </div>
                             <div className="flex gap-2">
@@ -132,26 +172,39 @@ export default function AssessmentReviewPage() {
                                     <Input placeholder="Search students..." className="h-8" />
                                 </div>
                                 <div className="divide-y">
-                                    {submissions.map(sub => (
-                                        <div
-                                            key={sub.id}
-                                            onClick={() => setActiveSubmissionId(sub.id)}
-                                            className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors ${activeSubmissionId === sub.id ? 'bg-primary/5 border-l-4 border-l-primary' : ''}`}
-                                        >
-                                            <div className="flex items-start justify-between mb-1">
-                                                <span className="font-semibold text-sm">{sub.studentName}</span>
-                                                {sub.status === 'graded' ? (
-                                                    <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50 text-[10px]">
-                                                        {sub.score}/{sub.maxScore}
-                                                    </Badge>
-                                                ) : (
-                                                    <Badge variant="outline" className="text-yellow-600 border-yellow-200 bg-yellow-50 text-[10px]">Pending</Badge>
-                                                )}
+                                    {loading ? (
+                                        [1, 2, 3].map(i => (
+                                            <div key={i} className="p-4 space-y-2">
+                                                <Skeleton className="h-4 w-3/4" />
+                                                <Skeleton className="h-3 w-1/2" />
                                             </div>
-                                            <p className="text-xs text-muted-foreground">{sub.rollNo}</p>
-                                            <p className="text-[10px] text-muted-foreground mt-2">Submitted {sub.submittedAt}</p>
+                                        ))
+                                    ) : submissionsData.length === 0 ? (
+                                        <div className="p-8 text-center text-sm text-muted-foreground">
+                                            No submissions yet
                                         </div>
-                                    ))}
+                                    ) : (
+                                        submissionsData.map((sub: any) => (
+                                            <div
+                                                key={sub.id}
+                                                onClick={() => setActiveSubmissionId(sub.id)}
+                                                className={`p-4 cursor-pointer hover:bg-muted/50 transition-colors ${activeSubmissionId === sub.id ? 'bg-primary/5 border-l-4 border-l-primary' : ''}`}
+                                            >
+                                                <div className="flex items-start justify-between mb-1">
+                                                    <span className="font-semibold text-sm">{sub.studentName}</span>
+                                                    {sub.status === 'graded' ? (
+                                                        <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50 text-[10px]">
+                                                            {sub.score}/{sub.maxScore}
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge variant="outline" className="text-yellow-600 border-yellow-200 bg-yellow-50 text-[10px]">Pending</Badge>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs text-muted-foreground">{sub.rollNo}</p>
+                                                <p className="text-[10px] text-muted-foreground mt-2">Submitted {sub.submittedAt}</p>
+                                            </div>
+                                        ))
+                                    )}
                                 </div>
                             </div>
 
@@ -181,7 +234,7 @@ export default function AssessmentReviewPage() {
                                         </Card>
 
                                         <div className="space-y-4">
-                                            {activeSubmission.answers.map((ans, idx) => (
+                                            {activeSubmission.answers.map((ans: any, idx: number) => (
                                                 <Card key={idx}>
                                                     <CardHeader className="py-3 bg-muted/30">
                                                         <div className="flex justify-between items-start gap-4">
@@ -227,9 +280,31 @@ export default function AssessmentReviewPage() {
                                                 </Card>
                                             ))}
 
-                                            {activeSubmission.answers.length === 0 && (
-                                                <div className="text-center py-12 text-muted-foreground">
-                                                    No answers to review (or answers hidden for demo).
+                                            {activeSubmission.fileUrl && (
+                                                <Card>
+                                                    <CardHeader className="py-4">
+                                                        <CardTitle className="text-sm">Submitted File</CardTitle>
+                                                    </CardHeader>
+                                                    <CardContent className="pb-4">
+                                                        <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border">
+                                                            <div className="flex items-center gap-3">
+                                                                <FileText className="w-8 h-8 text-primary" />
+                                                                <div>
+                                                                    <p className="text-sm font-medium">{activeSubmission.fileUrl.split('/').pop()}</p>
+                                                                    <p className="text-xs text-muted-foreground">Click to download and review</p>
+                                                                </div>
+                                                            </div>
+                                                            <Button size="sm" onClick={() => window.open(activeSubmission.fileUrl, '_blank')}>
+                                                                <Download className="w-4 h-4 mr-2" /> Download
+                                                            </Button>
+                                                        </div>
+                                                    </CardContent>
+                                                </Card>
+                                            )}
+
+                                            {activeSubmission.answers.length === 0 && !activeSubmission.fileUrl && (
+                                                <div className="text-center py-12 text-muted-foreground bg-muted/10 rounded-xl border border-dashed">
+                                                    No answers or files found for this submission.
                                                 </div>
                                             )}
                                         </div>

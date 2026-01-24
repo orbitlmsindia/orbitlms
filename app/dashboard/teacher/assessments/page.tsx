@@ -65,9 +65,64 @@ const mockAssessments: Assessment[] = [
     },
 ]
 
+import { useEffect } from "react"
+import { useSession } from "next-auth/react"
+
 export default function TeacherAssessmentsPage() {
     const router = useRouter()
+    const { data: session } = useSession()
     const [searchQuery, setSearchQuery] = useState("")
+    const [loading, setLoading] = useState(true)
+    const [items, setItems] = useState<any[]>([])
+
+    useEffect(() => {
+        const fetchAll = async () => {
+            try {
+                setLoading(true)
+                const [assessRes, assignRes, subsRes, resultsRes] = await Promise.all([
+                    fetch('/api/assessments'),
+                    fetch('/api/assignments'),
+                    fetch('/api/submissions'),
+                    fetch('/api/assessment-results')
+                ])
+                const [assessData, assignData, subsData, resultsData] = await Promise.all([
+                    assessRes.json(),
+                    assignRes.json(),
+                    subsRes.json(),
+                    resultsRes.json()
+                ])
+
+                const assessments = (assessData.data || []).map((a: any) => ({
+                    id: a._id,
+                    title: a.title,
+                    subject: a.course?.title || "N/A",
+                    type: "Quiz",
+                    dueDate: new Date(a.createdAt).toLocaleDateString(),
+                    submissions: (resultsData.data || []).filter((r: any) => r.assessment && r.assessment._id === a._id).length,
+                    totalStudents: a.course?.students?.length || 0,
+                    status: "Published"
+                }))
+
+                const assignments = (assignData.data || []).map((a: any) => ({
+                    id: a._id,
+                    title: a.title,
+                    subject: a.course?.title || "N/A",
+                    type: "Assignment",
+                    dueDate: new Date(a.dueDate).toLocaleDateString(),
+                    submissions: (subsData.data || []).filter((s: any) => s.assignment && s.assignment._id === a._id).length,
+                    totalStudents: a.course?.students?.length || 0,
+                    status: "Published"
+                }))
+
+                setItems([...assessments, ...assignments])
+            } catch (error) {
+                console.error("Failed to fetch data")
+            } finally {
+                setLoading(false)
+            }
+        }
+        fetchAll()
+    }, [])
 
     const getStatusColor = (status: string) => {
         switch (status) {
@@ -78,7 +133,7 @@ export default function TeacherAssessmentsPage() {
         }
     }
 
-    const filteredAssessments = mockAssessments.filter(a =>
+    const filteredAssessments = items.filter(a =>
         a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         a.subject.toLowerCase().includes(searchQuery.toLowerCase())
     )
@@ -86,17 +141,14 @@ export default function TeacherAssessmentsPage() {
     return (
         <div className="flex h-screen bg-background">
             <aside className="hidden sm:flex flex-col w-64 border-r border-border bg-sidebar">
-                <div className="flex items-center gap-2 px-4 py-6 border-b border-sidebar-border">
-                    <div className="w-8 h-8 bg-sidebar-primary rounded-lg flex items-center justify-center text-sidebar-primary-foreground font-bold">
-                        E
-                    </div>
-                    <span className="text-lg font-bold text-sidebar-foreground">EduHub</span>
+                <div className="flex items-center justify-center py-6 border-b border-sidebar-border">
+                    <img src="/logo.png" alt="Orbit" className="w-24 h-24 object-contain" />
                 </div>
                 <SidebarNav items={sidebarItems} onLogout={() => router.push("/login")} />
             </aside>
 
             <div className="flex flex-col flex-1 overflow-hidden">
-                <HeaderNav userName="Dr. Sarah Johnson" userRole="Teacher" onLogout={() => router.push("/login")} />
+                <HeaderNav userName={session?.user?.name || "Teacher"} userRole="Teacher" onLogout={() => router.push("/login")} />
 
                 <main className="flex-1 overflow-auto bg-muted/20">
                     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
@@ -124,7 +176,15 @@ export default function TeacherAssessmentsPage() {
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {filteredAssessments.map((assessment) => (
+                            {loading ? (
+                                <div className="col-span-full py-20 text-center text-muted-foreground italic">
+                                    Loading data from database...
+                                </div>
+                            ) : filteredAssessments.length === 0 ? (
+                                <div className="col-span-full py-20 text-center text-muted-foreground">
+                                    No assessments found. Create your first one!
+                                </div>
+                            ) : filteredAssessments.map((assessment) => (
                                 <Card key={assessment.id} className="group hover:border-primary/50 transition-all cursor-pointer" onClick={() => router.push(`/dashboard/teacher/assessments/${assessment.id}`)}>
                                     <CardHeader className="pb-3">
                                         <div className="flex justify-between items-start mb-2">

@@ -2,13 +2,14 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { toast } from "sonner"
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -19,7 +20,25 @@ export default function RegisterPage() {
     password: "",
     confirmPassword: "",
     role: "student",
+    instituteId: "",
   })
+  const [institutes, setInstitutes] = useState<any[]>([])
+
+  // Fetch institutes on mount
+  useEffect(() => {
+    const fetchInstitutes = async () => {
+      try {
+        const res = await fetch('/api/institutes')
+        const data = await res.json()
+        if (data.success) {
+          setInstitutes(data.data)
+        }
+      } catch (error) {
+        console.error("Failed to fetch institutes")
+      }
+    }
+    fetchInstitutes()
+  }, [])
   const [error, setError] = useState("")
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -28,7 +47,7 @@ export default function RegisterPage() {
   }
 
   const handleRoleChange = (value: string) => {
-    setFormData((prev) => ({ ...prev, role: value }))
+    setFormData((prev) => ({ ...prev, role: value.toLowerCase() }))
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -40,13 +59,50 @@ export default function RegisterPage() {
       return
     }
 
+    if (!formData.instituteId) {
+      setError("Please select an institute.")
+      return
+    }
+
     setIsLoading(true)
 
     try {
-      // TODO: Implement actual registration
-      router.push(`/dashboard/${formData.role}`)
+      const response = await fetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          instituteId: formData.instituteId,
+          password: formData.password,
+          role: formData.role,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        if (formData.role === 'teacher') {
+          toast.success("Registration Successful", {
+            description: "Your account is pending approval by the institute manager.",
+          })
+        } else {
+          toast.success("Account Created!", {
+            description: "Welcome to Orbit. Please log in with your new credentials.",
+          })
+        }
+        router.push("/login")
+      } else {
+        setError(data.error || "Registration failed. This email might already be in use.")
+        toast.error("Registration Error", {
+          description: data.error || "Could not synchronize with identity vault.",
+        })
+      }
     } catch (err) {
-      setError("Registration failed. Please try again.")
+      setError("A critical database connection error occurred.")
+      toast.error("Operational Failure", {
+        description: "The system could not reach the database.",
+      })
     } finally {
       setIsLoading(false)
     }
@@ -57,7 +113,8 @@ export default function RegisterPage() {
       <div className="w-full max-w-md space-y-8">
         {/* Logo */}
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-foreground">Join EduHub</h1>
+          <img src="/logo.png" alt="Orbit" className="h-12 w-auto object-contain mx-auto mb-4" />
+          <h1 className="text-3xl font-bold text-foreground">Join Orbit</h1>
           <p className="text-muted-foreground mt-2">Create your account to get started</p>
         </div>
 
@@ -96,6 +153,27 @@ export default function RegisterPage() {
               </div>
 
               <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Select Institute</label>
+                <Select disabled={isLoading || institutes.length === 0} value={formData.instituteId} onValueChange={(value) => setFormData(prev => ({ ...prev, instituteId: value }))}>
+                  <SelectTrigger>
+                    <SelectValue placeholder={institutes.length === 0 ? "Loading institutes..." : "Select Institute"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {institutes.length === 0 ? (
+                      <SelectItem value="none" disabled>No institutes available</SelectItem>
+                    ) : (
+                      institutes.map((inst) => (
+                        <SelectItem key={inst._id} value={inst._id}>{inst.name}</SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                {institutes.length === 0 && (
+                  <p className="text-xs text-muted-foreground">If no institutes appear, please contact support.</p>
+                )}
+              </div>
+
+              <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Account Type</label>
                 <Select value={formData.role} onValueChange={handleRoleChange}>
                   <SelectTrigger>
@@ -110,12 +188,14 @@ export default function RegisterPage() {
                 </Select>
               </div>
 
+
+
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">Password</label>
                 <Input
                   type="password"
                   name="password"
-                  placeholder="••••••••"
+                  placeholder="********"
                   value={formData.password}
                   onChange={handleChange}
                   required
@@ -128,7 +208,7 @@ export default function RegisterPage() {
                 <Input
                   type="password"
                   name="confirmPassword"
-                  placeholder="••••••••"
+                  placeholder="********"
                   value={formData.confirmPassword}
                   onChange={handleChange}
                   required

@@ -12,10 +12,10 @@ const sidebarItems = [
   { title: "Dashboard", href: "/dashboard/student", icon: "🏠" },
   { title: "My Courses", href: "/dashboard/student/courses", icon: "📚" },
   { title: "Assignments", href: "/dashboard/student/assignments", icon: "📋" },
-  { title: "Assessments", href: "/dashboard/student/assessments", icon: "✍️", badge: 3 },
-  { title: "AI Assistant", href: "/dashboard/student/ai-assistant", icon: "🤖" },
+  { title: "Quizzes", href: "/dashboard/student/assessments", icon: "✍️", badge: 3 },
+
+  { title: "Gamification", href: "/dashboard/student/gamification", icon: "🎮" },
   { title: "Progress", href: "/dashboard/student/progress", icon: "📊" },
-  { title: "Certificates", href: "/dashboard/student/certificates", icon: "🏆" },
 ]
 
 interface Assessment {
@@ -29,59 +29,108 @@ interface Assessment {
   maxScore: number
 }
 
-const assessments: Assessment[] = [
-  {
-    id: "1",
-    title: "Module 1 Quiz",
-    course: "Web Development Basics",
-    type: "quiz",
-    dueDate: "2024-03-10",
-    status: "graded",
-    score: 92,
-    maxScore: 100,
-  },
-  {
-    id: "2",
-    title: "Project Assignment",
-    course: "Web Development Basics",
-    type: "assignment",
-    dueDate: "2024-03-15",
-    status: "submitted",
-    maxScore: 100,
-  },
-  {
-    id: "3",
-    title: "Midterm Exam",
-    course: "Advanced React",
-    type: "exam",
-    dueDate: "2024-03-20",
-    status: "pending",
-    maxScore: 200,
-  },
-  {
-    id: "4",
-    title: "Coding Challenge",
-    course: "Advanced React",
-    type: "coding",
-    dueDate: "2024-03-12",
-    status: "pending",
-    maxScore: 50,
-  },
-  {
-    id: "5",
-    title: "Design System Quiz",
-    course: "UI/UX Design",
-    type: "quiz",
-    dueDate: "2024-03-08",
-    status: "graded",
-    score: 88,
-    maxScore: 100,
-  },
-]
+
+import { useEffect, useCallback } from "react"
+import { useSession } from "next-auth/react"
+import { toast } from "sonner"
+import { Skeleton } from "@/components/ui/skeleton"
 
 export default function AssessmentsPage() {
   const router = useRouter()
+  const { data: session } = useSession()
+  const user = session?.user as any
   const [selectedTab, setSelectedTab] = useState("all")
+  /* const [loading, setLoading] = useState(false) */
+  const [loading, setLoading] = useState(true)
+  const [assessmentsData, setAssessmentsData] = useState<Assessment[]>([])
+
+  const fetchAssessments = useCallback(async () => {
+    if (!user?.id) return
+
+    try {
+      setLoading(true)
+      // 1. Fetch Student's Enrollments to get Course IDs
+      const enrollRes = await fetch(`/api/enrollments?studentId=${user.id}`)
+      const enrollJson = await enrollRes.json()
+
+      let enrolledCourseIds: string[] = []
+      if (enrollJson.success) {
+        // Safely extract course ID
+        enrolledCourseIds = enrollJson.data
+          .map((e: any) => {
+            const course = e.course;
+            if (!course) return null;
+            return (course._id || course).toString()
+          })
+          .filter((id: string | null) => id !== null)
+      }
+
+      if (enrolledCourseIds.length === 0) {
+        setAssessmentsData([])
+        setLoading(false)
+        return
+      }
+
+      // 2. Fetch All Assessments (Quizzes) for these Courses
+      // We need an endpoint that accepts courseIds or we filter client side if API returns all.
+      // Assuming we can fetch all and filter, or a specific endpoint exists.
+      // Let's try fetching from /api/assessments and filtering by course.
+      // Ideally backend should support filtering.
+      const assessRes = await fetch(`/api/assessments`)
+      const assessJson = await assessRes.json()
+
+      let allAssessments: any[] = []
+      if (assessJson.success) {
+        allAssessments = assessJson.data.filter((a: any) => {
+          const aCourseId = (a.course?._id || a.course).toString();
+          return enrolledCourseIds.includes(aCourseId);
+        })
+      }
+
+      // 3. Fetch Student's Results
+      const resultsRes = await fetch(`/api/assessment-results?studentId=${user.id}`)
+      const resultsJson = await resultsRes.json()
+      const results = resultsJson.success ? resultsJson.data : []
+
+      // 4. Merge Data
+      const mergedData: Assessment[] = allAssessments.map((assessment: any) => {
+        // Find if user has a result for this assessment
+        // assessment.id might be _id
+        const result = results.find((r: any) => r.assessment === assessment._id)
+
+        let status: "pending" | "submitted" | "graded" = "pending"
+        let score = undefined
+
+        if (result) {
+          status = 'graded' // Assessments are auto-graded usually
+          score = result.score
+        }
+
+        return {
+          id: assessment._id,
+          title: assessment.title,
+          course: assessment.courseName || "General", // You might need to populate this on backend or map it
+          type: assessment.type || "quiz",
+          dueDate: assessment.dueDate ? new Date(assessment.dueDate).toLocaleDateString() : "No Due Date",
+          status: status,
+          score: score,
+          maxScore: assessment.questions ? assessment.questions.length : 0 // Assuming 1 mark per question
+        }
+      })
+
+      setAssessmentsData(mergedData)
+
+    } catch (error) {
+      console.error("Error fetching data:", error)
+      toast.error("Failed to load assessments")
+    } finally {
+      setLoading(false)
+    }
+  }, [user?.id])
+
+  useEffect(() => {
+    fetchAssessments()
+  }, [fetchAssessments])
 
   const getTypeIcon = (type: string) => {
     switch (type) {
@@ -111,22 +160,19 @@ export default function AssessmentsPage() {
     }
   }
 
-  const filteredAssessments = assessments.filter((a) => {
+  const filteredAssessments = assessmentsData.filter((a) => {
     if (selectedTab === "all") return true
     return a.status === selectedTab
   })
 
-  const pendingCount = assessments.filter((a) => a.status === "pending").length
+  const pendingCount = assessmentsData.filter((a) => a.status === "pending").length
 
   return (
     <div className="flex h-screen bg-background">
       {/* Sidebar */}
       <aside className="hidden sm:flex flex-col w-64 border-r border-border bg-sidebar">
-        <div className="flex items-center gap-2 px-4 py-6 border-b border-sidebar-border">
-          <div className="w-8 h-8 bg-sidebar-primary rounded-lg flex items-center justify-center text-sidebar-primary-foreground font-bold">
-            E
-          </div>
-          <span className="text-lg font-bold text-sidebar-foreground">EduHub</span>
+        <div className="flex items-center justify-center py-6 border-b border-sidebar-border">
+          <img src="/logo.png" alt="Orbit" className="w-24 h-24 object-contain" />
         </div>
         <SidebarNav
           items={sidebarItems}
@@ -139,7 +185,7 @@ export default function AssessmentsPage() {
       {/* Main Content */}
       <div className="flex flex-col flex-1 overflow-hidden">
         <HeaderNav
-          userName="Alex Johnson"
+          userName={session?.user?.name || "Student"}
           userRole="Student"
           onLogout={() => {
             router.push("/login")
@@ -150,7 +196,7 @@ export default function AssessmentsPage() {
           <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
             {/* Header */}
             <div className="mb-8">
-              <h1 className="text-3xl font-bold text-foreground mb-2">Assessments</h1>
+              <h1 className="text-3xl font-bold text-foreground mb-2">Quizzes</h1>
               <p className="text-muted-foreground">Manage your quizzes, assignments, and exams</p>
             </div>
 
@@ -159,15 +205,19 @@ export default function AssessmentsPage() {
               <Card>
                 <CardContent className="pt-6">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-primary mb-2">{assessments.length}</div>
-                    <p className="text-sm text-muted-foreground">Total Assessments</p>
+                    <div className="text-3xl font-bold text-primary mb-2">
+                      {loading ? <Skeleton className="h-8 w-12 mx-auto" /> : assessmentsData.length}
+                    </div>
+                    <p className="text-sm text-muted-foreground">Total Quizzes</p>
                   </div>
                 </CardContent>
               </Card>
               <Card>
                 <CardContent className="pt-6">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-yellow-600 dark:text-yellow-400 mb-2">{pendingCount}</div>
+                    <div className="text-3xl font-bold text-yellow-600 dark:text-yellow-400 mb-2">
+                      {loading ? <Skeleton className="h-8 w-12 mx-auto" /> : pendingCount}
+                    </div>
                     <p className="text-sm text-muted-foreground">Pending</p>
                   </div>
                 </CardContent>
@@ -176,7 +226,7 @@ export default function AssessmentsPage() {
                 <CardContent className="pt-6">
                   <div className="text-center">
                     <div className="text-3xl font-bold text-green-600 dark:text-green-400 mb-2">
-                      {assessments.filter((a) => a.status === "graded").length}
+                      {loading ? <Skeleton className="h-8 w-12 mx-auto" /> : assessmentsData.filter((a) => a.status === "graded").length}
                     </div>
                     <p className="text-sm text-muted-foreground">Graded</p>
                   </div>
@@ -186,11 +236,15 @@ export default function AssessmentsPage() {
                 <CardContent className="pt-6">
                   <div className="text-center">
                     <div className="text-3xl font-bold text-primary mb-2">
-                      {Math.round(
-                        assessments
-                          .filter((a) => a.status === "graded" && a.score)
-                          .reduce((sum, a) => sum + (a.score || 0), 0) /
-                        Math.max(assessments.filter((a) => a.status === "graded").length, 1),
+                      {loading ? (
+                        <Skeleton className="h-8 w-16 mx-auto" />
+                      ) : (
+                        Math.round(
+                          assessmentsData
+                            .filter((a) => a.status === "graded" && a.score)
+                            .reduce((sum, a) => sum + (a.score || 0), 0) /
+                          Math.max(assessmentsData.filter((a) => a.status === "graded").length, 1),
+                        )
                       )}
                       %
                     </div>
@@ -210,7 +264,20 @@ export default function AssessmentsPage() {
               </TabsList>
 
               <TabsContent value={selectedTab} className="space-y-3">
-                {filteredAssessments.map((assessment) => (
+                {loading ? (
+                  [1, 2, 3].map((i) => (
+                    <Card key={i} className="p-6">
+                      <div className="flex justify-between items-center">
+                        <Skeleton className="h-12 w-1/3" />
+                        <Skeleton className="h-8 w-24" />
+                      </div>
+                    </Card>
+                  ))
+                ) : filteredAssessments.length === 0 ? (
+                  <div className="text-center py-12 bg-muted/20 rounded-xl border border-dashed">
+                    <p className="text-muted-foreground">No assessments found in this category.</p>
+                  </div>
+                ) : filteredAssessments.map((assessment) => (
                   <Card key={assessment.id} className="overflow-hidden hover:border-primary/50 transition">
                     <CardContent className="p-6">
                       <div className="flex items-start justify-between gap-4">

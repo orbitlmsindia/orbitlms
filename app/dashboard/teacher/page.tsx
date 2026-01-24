@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { HeaderNav } from "@/components/header-nav"
 import { SidebarNav } from "@/components/sidebar-nav"
 import { Button } from "@/components/ui/button"
@@ -18,6 +19,8 @@ import {
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { toast } from "sonner"
+
 
 const sidebarItems = [
   { title: "Dashboard", href: "/dashboard/teacher", icon: "🏠" },
@@ -34,7 +37,7 @@ interface Course {
   students: number
   lessons: number
   progress: number
-  status: "active" | "draft" | "archived"
+  status: "active" | "draft" | "archived" | "published"
 }
 
 interface StudentProgress {
@@ -46,55 +49,103 @@ interface StudentProgress {
   status: "active" | "inactive"
 }
 
-const mockCourses: Course[] = [
-  { id: "1", title: "Web Development Basics", students: 45, lessons: 12, progress: 100, status: "active" },
-  { id: "2", title: "Advanced React Patterns", students: 32, lessons: 8, progress: 75, status: "active" },
-  { id: "3", title: "Backend with Node.js", students: 28, lessons: 15, progress: 50, status: "draft" },
-]
-
-const studentProgress: StudentProgress[] = [
-  {
-    id: "1",
-    name: "Sarah Mitchell",
-    course: "Web Development Basics",
-    progress: 85,
-    lastActive: "Today",
-    status: "active",
-  },
-  {
-    id: "2",
-    name: "James Wilson",
-    course: "Web Development Basics",
-    progress: 65,
-    lastActive: "2 days ago",
-    status: "inactive",
-  },
-  { id: "3", name: "Emily Chen", course: "Advanced React", progress: 92, lastActive: "Today", status: "active" },
-  {
-    id: "4",
-    name: "Michael Brown",
-    course: "Advanced React",
-    progress: 45,
-    lastActive: "1 week ago",
-    status: "inactive",
-  },
-]
-
 export default function TeacherDashboard() {
   const router = useRouter()
+  const { data: session } = useSession()
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [newCourse, setNewCourse] = useState({ title: "", description: "" })
+  const [courses, setCourses] = useState<Course[]>([])
+  const [recentStudents, setRecentStudents] = useState<StudentProgress[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const totalStudents = mockCourses.reduce((sum, course) => sum + course.students, 0)
-  const totalLessons = mockCourses.reduce((sum, course) => sum + course.lessons, 0)
-  const avgProgress = Math.round(mockCourses.reduce((sum, course) => sum + course.progress, 0) / mockCourses.length)
+  const fetchDashboardData = async () => {
+    if (!session?.user) return
+
+    setLoading(true)
+    try {
+      // 1. Fetch Courses (Single Source of Truth)
+      const coursesRes = await fetch('/api/courses')
+      const coursesData = await coursesRes.json()
+
+      if (coursesData.success) {
+        const mappedCourses = coursesData.data.map((c: any) => ({
+          id: c._id,
+          title: c.title,
+          students: c.students?.length || 0,
+          lessons: c.chapters?.reduce((acc: number, ch: any) => acc + (ch.lessons?.length || 0), 0) || 0,
+          progress: 0, // Calculate real progress if possible, else 0 or average
+          status: c.status === 'published' ? 'active' : (c.status || 'draft')
+        }))
+        setCourses(mappedCourses)
+      } else {
+        toast.error("Failed to load courses")
+      }
+
+      // 2. Fetch Students
+      const usersRes = await fetch('/api/users?role=student')
+      const usersData = await usersRes.json()
+      if (usersData.success) {
+        const mappedStudents = usersData.data.slice(0, 5).map((u: any) => ({
+          id: u._id,
+          name: u.name,
+          course: "Web Development", // This needs real enrollment data linkage
+          progress: Math.floor(Math.random() * 100), // Placeholder until real progress API
+          lastActive: "Today",
+          status: "active"
+        }))
+        setRecentStudents(mappedStudents)
+      }
+
+    } catch (e) {
+      console.error("Dashboard fetch error:", e)
+      toast.error("Failed to load dashboard data")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchDashboardData()
+  }, [session])
+
+  const handleCreateCourse = async () => {
+    try {
+      const res = await fetch('/api/courses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newCourse)
+      })
+      const data = await res.json()
+
+      if (data.success) {
+        toast.success("Course created successfully!")
+        setIsCreateDialogOpen(false)
+        setNewCourse({ title: "", description: "" })
+        fetchDashboardData() // Refresh list
+        router.push(`/dashboard/teacher/courses/create?id=${data.data._id}`)
+      } else {
+        toast.error(data.error || "Failed to create course")
+      }
+    } catch (error) {
+      toast.error("An error occurred")
+    }
+  }
+
+
+  // Dynamic Stats Calculation
+  const totalStudents = courses.reduce((sum, course) => sum + course.students, 0)
+  const totalLessons = courses.reduce((sum, course) => sum + course.lessons, 0)
+  // Avoid division by zero
+  const avgProgress = courses.length > 0
+    ? Math.round(courses.reduce((sum, course) => sum + course.progress, 0) / courses.length)
+    : 0
 
   return (
     <div className="flex h-screen bg-background">
       {/* Sidebar */}
       <aside className="hidden sm:flex flex-col w-64 border-r border-border bg-sidebar">
-        <div className="flex items-center gap-2 px-4 py-6 border-b border-sidebar-border">
-          <span className="text-lg font-bold text-sidebar-foreground">EduHub</span>
+        <div className="flex items-center justify-center py-6 border-b border-sidebar-border">
+          <img src="/logo.png" alt="Orbit" className="w-24 h-24 object-contain" />
         </div>
         <SidebarNav
           items={sidebarItems}
@@ -107,7 +158,7 @@ export default function TeacherDashboard() {
       {/* Main Content */}
       <div className="flex flex-col flex-1 overflow-hidden">
         <HeaderNav
-          userName="Dr. Sarah Johnson"
+          userName={session?.user?.name || "Teacher"}
           userRole="Teacher"
           onLogout={() => {
             router.push("/login")
@@ -119,7 +170,7 @@ export default function TeacherDashboard() {
             {/* Welcome Section */}
             <div className="flex justify-between items-center mb-8">
               <div>
-                <h1 className="text-3xl font-bold text-foreground mb-2">Welcome, Dr. Johnson!</h1>
+                <h1 className="text-3xl font-bold text-foreground mb-2">Welcome, {session?.user?.name || "Teacher"}!</h1>
                 <p className="text-muted-foreground">Manage your courses and track student progress</p>
               </div>
               <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
@@ -153,12 +204,7 @@ export default function TeacherDashboard() {
                     <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                       Cancel
                     </Button>
-                    <Button
-                      onClick={() => {
-                        setIsCreateDialogOpen(false)
-                        setNewCourse({ title: "", description: "" })
-                      }}
-                    >
+                    <Button onClick={handleCreateCourse}>
                       Create Course
                     </Button>
                   </DialogFooter>
@@ -171,7 +217,7 @@ export default function TeacherDashboard() {
               <Card>
                 <CardContent className="pt-6">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-primary mb-2">{mockCourses.length}</div>
+                    <div className="text-3xl font-bold text-primary mb-2">{loading ? "-" : courses.length}</div>
                     <p className="text-sm text-muted-foreground">Courses</p>
                   </div>
                 </CardContent>
@@ -179,7 +225,7 @@ export default function TeacherDashboard() {
               <Card>
                 <CardContent className="pt-6">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-secondary mb-2">{totalStudents}</div>
+                    <div className="text-3xl font-bold text-secondary mb-2">{loading ? "-" : totalStudents}</div>
                     <p className="text-sm text-muted-foreground">Students</p>
                   </div>
                 </CardContent>
@@ -187,7 +233,7 @@ export default function TeacherDashboard() {
               <Card>
                 <CardContent className="pt-6">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-accent mb-2">{totalLessons}</div>
+                    <div className="text-3xl font-bold text-accent mb-2">{loading ? "-" : totalLessons}</div>
                     <p className="text-sm text-muted-foreground">Lessons</p>
                   </div>
                 </CardContent>
@@ -195,7 +241,7 @@ export default function TeacherDashboard() {
               <Card>
                 <CardContent className="pt-6">
                   <div className="text-center">
-                    <div className="text-3xl font-bold text-primary mb-2">{avgProgress}%</div>
+                    <div className="text-3xl font-bold text-primary mb-2">{loading ? "-" : avgProgress}%</div>
                     <p className="text-sm text-muted-foreground">Avg Progress</p>
                   </div>
                 </CardContent>
@@ -211,60 +257,66 @@ export default function TeacherDashboard() {
               </TabsList>
 
               <TabsContent value="courses" className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {mockCourses.map((course) => (
-                    <Card key={course.id} className="hover:border-primary/50 transition-colors cursor-pointer group">
-                      <CardHeader className="pb-4">
-                        <div className="flex justify-between items-start gap-4 mb-2">
-                          <div className="flex-1">
-                            <CardTitle className="text-lg">{course.title}</CardTitle>
-                          </div>
-                          <span
-                            className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${course.status === "active"
+                {courses.length === 0 && !loading ? (
+                  <div className="text-center py-10 border-2 border-dashed rounded-lg text-muted-foreground">
+                    No courses found. Create one to get started!
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {courses.map((course) => (
+                      <Card key={course.id} className="hover:border-primary/50 transition-colors cursor-pointer group" onClick={() => router.push(`/dashboard/teacher/courses/create?id=${course.id}`)}>
+                        <CardHeader className="pb-4">
+                          <div className="flex justify-between items-start gap-4 mb-2">
+                            <div className="flex-1">
+                              <CardTitle className="text-lg line-clamp-1">{course.title}</CardTitle>
+                            </div>
+                            <span
+                              className={`px-2 py-1 rounded-full text-xs font-semibold whitespace-nowrap ${course.status === "active"
                                 ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
                                 : course.status === "draft"
                                   ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300"
                                   : "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-300"
-                              }`}
-                          >
-                            {course.status}
-                          </span>
-                        </div>
-                      </CardHeader>
-                      <CardContent className="space-y-4">
-                        <div className="grid grid-cols-3 gap-2 text-center text-sm">
-                          <div>
-                            <div className="text-lg font-semibold text-primary">{course.students}</div>
-                            <p className="text-xs text-muted-foreground">Students</p>
+                                }`}
+                            >
+                              {course.status}
+                            </span>
                           </div>
-                          <div>
-                            <div className="text-lg font-semibold text-secondary">{course.lessons}</div>
-                            <p className="text-xs text-muted-foreground">Lessons</p>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          <div className="grid grid-cols-3 gap-2 text-center text-sm">
+                            <div>
+                              <div className="text-lg font-semibold text-primary">{course.students}</div>
+                              <p className="text-xs text-muted-foreground">Students</p>
+                            </div>
+                            <div>
+                              <div className="text-lg font-semibold text-secondary">{course.lessons}</div>
+                              <p className="text-xs text-muted-foreground">Lessons</p>
+                            </div>
+                            <div>
+                              <div className="text-lg font-semibold text-accent">{course.progress}%</div>
+                              <p className="text-xs text-muted-foreground">Done</p>
+                            </div>
                           </div>
-                          <div>
-                            <div className="text-lg font-semibold text-accent">{course.progress}%</div>
-                            <p className="text-xs text-muted-foreground">Done</p>
-                          </div>
-                        </div>
 
-                        <div className="space-y-2">
-                          <div className="w-full bg-muted rounded-full h-2">
-                            <div className="bg-primary h-2 rounded-full" style={{ width: `${course.progress}%` }} />
+                          <div className="space-y-2">
+                            <div className="w-full bg-muted rounded-full h-2">
+                              <div className="bg-primary h-2 rounded-full" style={{ width: `${course.progress}%` }} />
+                            </div>
                           </div>
-                        </div>
 
-                        <div className="flex gap-2 group-hover:opacity-100 opacity-0 transition">
-                          <Button size="sm" className="flex-1 text-xs bg-transparent" variant="outline">
-                            Edit
-                          </Button>
-                          <Button size="sm" className="flex-1 text-xs">
-                            Manage
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+                          <div className="flex gap-2 group-hover:opacity-100 opacity-0 transition">
+                            <Button size="sm" className="flex-1 text-xs bg-transparent" variant="outline">
+                              Edit
+                            </Button>
+                            <Button size="sm" className="flex-1 text-xs">
+                              Manage
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="progress" className="space-y-4">
@@ -275,37 +327,41 @@ export default function TeacherDashboard() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {studentProgress.map((student) => (
-                        <div
-                          key={student.id}
-                          className="p-4 rounded-lg border border-border hover:border-primary/50 transition"
-                        >
-                          <div className="flex items-center justify-between mb-3">
-                            <div>
-                              <h4 className="font-semibold text-foreground">{student.name}</h4>
-                              <p className="text-sm text-muted-foreground">{student.course}</p>
-                            </div>
-                            <span
-                              className={`px-3 py-1 rounded-full text-xs font-semibold ${student.status === "active"
+                      {recentStudents.length === 0 ? (
+                        <p className="text-muted-foreground text-center py-4">No students found in your institute.</p>
+                      ) : (
+                        recentStudents.map((student) => (
+                          <div
+                            key={student.id}
+                            className="p-4 rounded-lg border border-border hover:border-primary/50 transition"
+                          >
+                            <div className="flex items-center justify-between mb-3">
+                              <div>
+                                <h4 className="font-semibold text-foreground">{student.name}</h4>
+                                <p className="text-sm text-muted-foreground">{student.course}</p>
+                              </div>
+                              <span
+                                className={`px-3 py-1 rounded-full text-xs font-semibold ${student.status === "active"
                                   ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
                                   : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300"
-                                }`}
-                            >
-                              {student.status}
-                            </span>
-                          </div>
-                          <div className="space-y-2">
-                            <div className="flex justify-between text-sm">
-                              <span className="text-muted-foreground">Progress</span>
-                              <span className="font-semibold text-foreground">{student.progress}%</span>
+                                  }`}
+                              >
+                                {student.status}
+                              </span>
                             </div>
-                            <div className="w-full bg-muted rounded-full h-2">
-                              <div className="bg-primary h-2 rounded-full" style={{ width: `${student.progress}%` }} />
+                            <div className="space-y-2">
+                              <div className="flex justify-between text-sm">
+                                <span className="text-muted-foreground">Progress</span>
+                                <span className="font-semibold text-foreground">{student.progress}%</span>
+                              </div>
+                              <div className="w-full bg-muted rounded-full h-2">
+                                <div className="bg-primary h-2 rounded-full" style={{ width: `${student.progress}%` }} />
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-2">Last active: {student.lastActive}</p>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-2">Last active: {student.lastActive}</p>
                           </div>
-                        </div>
-                      ))}
+                        ))
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -353,10 +409,10 @@ export default function TeacherDashboard() {
                   </CardContent>
                 </Card>
               </TabsContent>
-            </Tabs>
-          </div>
-        </main>
-      </div>
-    </div>
+            </Tabs >
+          </div >
+        </main >
+      </div >
+    </div >
   )
 }

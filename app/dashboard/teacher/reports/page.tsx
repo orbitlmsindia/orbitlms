@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { HeaderNav } from "@/components/header-nav"
 import { SidebarNav } from "@/components/sidebar-nav"
 import { Button } from "@/components/ui/button"
@@ -10,16 +11,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Download, FileText, PieChart, TrendingUp, Users } from "lucide-react"
+import { Download, FileText as FileTextIcon, PieChart as PieChartIcon, TrendingUp, Users, LayoutDashboard, BookOpen, BarChart as BarChartIcon, ClipboardList } from "lucide-react"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts'
 
+
 const sidebarItems = [
-    { title: "Dashboard", href: "/dashboard/teacher", icon: "🏠" },
-    { title: "My Courses", href: "/dashboard/teacher/courses", icon: "📚" },
-    { title: "Assessments", href: "/dashboard/teacher/assessments", icon: "✍️" },
-    { title: "Student Progress", href: "/dashboard/teacher/progress", icon: "📊" },
-    { title: "Attendance", href: "/dashboard/teacher/attendance", icon: "📋" },
-    { title: "Reports", href: "/dashboard/teacher/reports", icon: "📈" },
+    { title: "Dashboard", href: "/dashboard/teacher", icon: <LayoutDashboard className="w-5 h-5" /> },
+    { title: "My Courses", href: "/dashboard/teacher/courses", icon: <BookOpen className="w-5 h-5" /> },
+    { title: "Assessments", href: "/dashboard/teacher/assessments", icon: <FileTextIcon className="w-5 h-5" /> },
+    { title: "Student Progress", href: "/dashboard/teacher/progress", icon: <BarChartIcon className="w-5 h-5" /> },
+    { title: "Attendance", href: "/dashboard/teacher/attendance", icon: <ClipboardList className="w-5 h-5" /> },
+    { title: "Reports", href: "/dashboard/teacher/reports", icon: <PieChartIcon className="w-5 h-5" /> },
 ]
 
 const performanceData = [
@@ -40,20 +42,20 @@ const recentReports = [
 
 export default function ReportsPage() {
     const router = useRouter()
+    const { data: session } = useSession()
     const [reportType, setReportType] = useState("academic")
 
     return (
         <div className="flex h-screen bg-background">
             <aside className="hidden sm:flex flex-col w-64 border-r border-border bg-sidebar">
-                <div className="flex items-center gap-2 px-4 py-6 border-b border-sidebar-border">
-                    <div className="w-8 h-8 bg-sidebar-primary rounded-lg flex items-center justify-center text-sidebar-primary-foreground font-bold">E</div>
-                    <span className="text-lg font-bold text-sidebar-foreground">EduHub</span>
+                <div className="flex items-center justify-center py-6 border-b border-sidebar-border">
+                    <img src="/logo.png" alt="Orbit" className="w-24 h-24 object-contain" />
                 </div>
                 <SidebarNav items={sidebarItems} onLogout={() => router.push("/login")} />
             </aside>
 
             <div className="flex flex-col flex-1 overflow-hidden">
-                <HeaderNav userName="Dr. Sarah Johnson" userRole="Teacher" onLogout={() => router.push("/login")} />
+                <HeaderNav userName={session?.user?.name || "Teacher"} userRole="Teacher" onLogout={() => router.push("/login")} />
 
                 <main className="flex-1 overflow-auto bg-muted/20">
                     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
@@ -93,7 +95,7 @@ export default function ReportsPage() {
                             <Card>
                                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                                     <CardTitle className="text-sm font-medium text-muted-foreground">Assignments Submitted</CardTitle>
-                                    <FileText className="w-4 h-4 text-purple-500" />
+                                    <FileTextIcon className="w-4 h-4 text-purple-500" />
                                 </CardHeader>
                                 <CardContent>
                                     <div className="text-2xl font-bold">342</div>
@@ -156,7 +158,7 @@ export default function ReportsPage() {
                                                     </div>
                                                     <div>
                                                         <p className="text-sm font-medium line-clamp-1">{file.name}</p>
-                                                        <p className="text-xs text-muted-foreground">{file.date} • {file.size}</p>
+                                                        <p className="text-xs text-muted-foreground">{file.date} | {file.size}</p>
                                                     </div>
                                                 </div>
                                                 <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity">

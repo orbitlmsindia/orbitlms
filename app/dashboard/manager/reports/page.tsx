@@ -1,6 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { HeaderNav } from "@/components/header-nav"
 import { SidebarNav } from "@/components/sidebar-nav"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,15 +9,16 @@ import { Button } from "@/components/ui/button"
 import { Download, FileText, BarChart3, PieChart } from "lucide-react"
 
 const sidebarItems = [
-    { title: "Dashboard", href: "/dashboard/manager", icon: "🏠" },
-    { title: "Reports", href: "/dashboard/manager/reports", icon: "📊" },
-    { title: "Analytics", href: "/dashboard/manager/analytics", icon: "📈" },
-    { title: "Performance", href: "/dashboard/manager/performance", icon: "⚡" },
-    { title: "Certificates", href: "/dashboard/manager/certificates", icon: "🏆" },
+    { title: "Dashboard", href: "/dashboard/manager", icon: "ÃƒÂ°Ã…Â¸Ã‚ÂÃ‚Â " },
+    { title: "Reports", href: "/dashboard/manager/reports", icon: "ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â " },
+    { title: "Analytics", href: "/dashboard/manager/analytics", icon: "ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‹â€ " },
+    { title: "Performance", href: "/dashboard/manager/performance", icon: "ÃƒÂ¢Ã…Â¡Ã‚Â¡" },
+    { title: "Certificates", href: "/dashboard/manager/certificates", icon: "ÃƒÂ°Ã…Â¸Ã‚ÂÃ¢â‚¬Â " },
 ]
 
 export default function ManagerReportsPage() {
     const router = useRouter()
+    const { data: session } = useSession()
 
     const reports = [
         { title: "Institutional ROI Report", desc: "Detailed analysis of training investment returns", type: "PDF" },
@@ -28,15 +30,14 @@ export default function ManagerReportsPage() {
     return (
         <div className="flex h-screen bg-background">
             <aside className="hidden sm:flex flex-col w-64 border-r border-border bg-sidebar">
-                <div className="flex items-center gap-2 px-4 py-6 border-b border-sidebar-border">
-                    <div className="w-8 h-8 bg-sidebar-primary rounded-lg flex items-center justify-center text-sidebar-primary-foreground font-bold">E</div>
-                    <span className="text-lg font-bold text-sidebar-foreground">EduHub</span>
+                <div className="flex items-center justify-center py-6 border-b border-sidebar-border">
+                    <img src="/logo.png" alt="Orbit" className="w-24 h-24 object-contain" />
                 </div>
                 <SidebarNav items={sidebarItems} onLogout={() => router.push("/login")} />
             </aside>
 
             <div className="flex flex-col flex-1 overflow-hidden">
-                <HeaderNav userName="Manager User" userRole="Manager" onLogout={() => router.push("/login")} />
+                <HeaderNav userName={session?.user?.name || "Manager"} userRole="Manager" onLogout={() => router.push("/login")} />
                 <main className="flex-1 overflow-auto bg-muted/20">
                     <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto">
                         <h1 className="text-3xl font-bold mb-8">Strategic Reports</h1>
@@ -53,7 +54,7 @@ export default function ManagerReportsPage() {
                                         </div>
                                     </CardHeader>
                                     <CardContent className="flex justify-between items-center pt-0">
-                                        <span className="text-xs font-medium text-muted-foreground uppercase">{report.type} File • Generated Mar 20</span>
+                                        <span className="text-xs font-medium text-muted-foreground uppercase">{report.type} File ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Generated Mar 20</span>
                                         <Button variant="outline" size="sm" className="gap-2">
                                             <Download className="w-4 h-4" /> Download
                                         </Button>
