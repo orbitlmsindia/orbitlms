@@ -6,14 +6,15 @@ import { HeaderNav } from "@/components/header-nav"
 import { SidebarNav } from "@/components/sidebar-nav"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Download, FileText, BarChart3, PieChart } from "lucide-react"
+import { Download, FileText, BarChart3, PieChart, LayoutDashboard, Users, BarChart, LineChart, Zap, Award } from "lucide-react"
 
 const sidebarItems = [
-    { title: "Dashboard", href: "/dashboard/manager", icon: "ÃƒÂ°Ã…Â¸Ã‚ÂÃ‚Â " },
-    { title: "Reports", href: "/dashboard/manager/reports", icon: "ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â " },
-    { title: "Analytics", href: "/dashboard/manager/analytics", icon: "ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‹â€ " },
-    { title: "Performance", href: "/dashboard/manager/performance", icon: "ÃƒÂ¢Ã…Â¡Ã‚Â¡" },
-    { title: "Certificates", href: "/dashboard/manager/certificates", icon: "ÃƒÂ°Ã…Â¸Ã‚ÂÃ¢â‚¬Â " },
+    { title: "Dashboard", href: "/dashboard/manager", icon: <LayoutDashboard size={24} /> },
+    { title: "Users", href: "/dashboard/manager/users", icon: <Users size={24} /> },
+    { title: "Reports", href: "/dashboard/manager/reports", icon: <BarChart size={24} /> },
+    { title: "Analytics", href: "/dashboard/manager/analytics", icon: <LineChart size={24} /> },
+    { title: "Performance", href: "/dashboard/manager/performance", icon: <Zap size={24} /> },
+    { title: "Certificates", href: "/dashboard/manager/certificates", icon: <Award size={24} /> },
 ]
 
 export default function ManagerReportsPage() {
@@ -54,7 +55,7 @@ export default function ManagerReportsPage() {
                                         </div>
                                     </CardHeader>
                                     <CardContent className="flex justify-between items-center pt-0">
-                                        <span className="text-xs font-medium text-muted-foreground uppercase">{report.type} File ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ Generated Mar 20</span>
+                                        <span className="text-xs font-medium text-muted-foreground uppercase">{report.type} File • Generated Mar 20</span>
                                         <Button variant="outline" size="sm" className="gap-2">
                                             <Download className="w-4 h-4" /> Download
                                         </Button>

@@ -56,29 +56,43 @@ export default function StudentProgressPage() {
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
     const [loading, setLoading] = useState(true)
 
+    const [selectedCourseId, setSelectedCourseId] = useState<string>("")
+    const [courses, setCourses] = useState<any[]>([])
+
+    // Fetch Courses first
+    useEffect(() => {
+        const fetchCourses = async () => {
+            try {
+                const res = await fetch('/api/courses')
+                const data = await res.json()
+                if (data.success && data.data.length > 0) {
+                    setCourses(data.data)
+                    setSelectedCourseId(data.data[0]._id) // Default to first course
+                }
+            } catch (error) {
+                console.error("Failed to fetch courses")
+            }
+        }
+        fetchCourses()
+    }, [])
+
     const fetchStudents = async () => {
+        if (!selectedCourseId) return
+
+        setLoading(true)
         try {
-            const res = await fetch('/api/users?role=student')
+            const res = await fetch(`/api/teacher/progress?courseId=${selectedCourseId}`)
             const data = await res.json()
             if (data.success) {
-                // Transform API user data to Student interface with mock stats
-                // In a real app, these stats would come from a separate 'student-performance' API
-                const mappedStudents: Student[] = data.data.map((user: any) => ({
-                    id: user._id,
-                    name: user.name,
-                    email: user.email,
-                    avatar: user.name.charAt(0).toUpperCase(),
-                    overallScore: Math.floor(Math.random() * 40) + 60, // Mock score 60-100
-                    courseCompletion: Math.floor(Math.random() * 100),
-                    attendance: Math.floor(Math.random() * 30) + 70, // Mock attendance 70-100
-                    assignmentsSubmitted: Math.floor(Math.random() * 12),
-                    totalAssignments: 12,
-                    status: ['Excellent', 'Good', 'Average', 'At Risk'][Math.floor(Math.random() * 4)] as any
-                }))
-                setStudents(mappedStudents)
-                if (mappedStudents.length > 0) {
-                    setSelectedStudent(mappedStudents[0])
+                setStudents(data.data)
+                if (data.data.length > 0) {
+                    setSelectedStudent(data.data[0])
+                } else {
+                    setSelectedStudent(null)
                 }
+            } else {
+                setStudents([])
+                setSelectedStudent(null)
             }
         } catch (error) {
             console.error("Failed to fetch students")
@@ -88,8 +102,10 @@ export default function StudentProgressPage() {
     }
 
     useEffect(() => {
-        fetchStudents()
-    }, [])
+        if (selectedCourseId) {
+            fetchStudents()
+        }
+    }, [selectedCourseId])
 
     const getStatusColor = (status: Student['status']) => {
         switch (status) {
@@ -122,13 +138,14 @@ export default function StudentProgressPage() {
                                 <p className="text-muted-foreground">Track performance and identify students needing support</p>
                             </div>
                             <div className="flex gap-2">
-                                <Select defaultValue="web-dev">
-                                    <SelectTrigger className="w-[180px]">
+                                <Select value={selectedCourseId} onValueChange={setSelectedCourseId}>
+                                    <SelectTrigger className="w-[220px]">
                                         <SelectValue placeholder="Select Course" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="web-dev">Web Development</SelectItem>
-                                        <SelectItem value="react">Advanced React</SelectItem>
+                                        {courses.map(c => (
+                                            <SelectItem key={c._id} value={c._id}>{c.title}</SelectItem>
+                                        ))}
                                     </SelectContent>
                                 </Select>
                                 <Button variant="outline">

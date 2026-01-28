@@ -7,15 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 
-const sidebarItems = [
-  { title: "Dashboard", href: "/dashboard/student", icon: "🏠" },
-  { title: "My Courses", href: "/dashboard/student/courses", icon: "📚" },
-  { title: "Assignments", href: "/dashboard/student/assignments", icon: "📋" },
-  { title: "Quizzes", href: "/dashboard/student/assessments", icon: "✍️" },
 
-  { title: "Gamification", href: "/dashboard/student/gamification", icon: "🎮" },
-  { title: "Progress", href: "/dashboard/student/progress", icon: "📊" },
-]
 
 interface Badge {
   id: string
@@ -232,7 +224,36 @@ export default function GamificationPage() {
   const { data: session } = useSession()
   const [selectedBadge, setSelectedBadge] = useState<Badge | null>(null)
   const [points, setPoints] = useState(2850)
+  const [pendingQuizCount, setPendingQuizCount] = useState<number | undefined>(undefined)
   const [claimedChallenges, setClaimedChallenges] = useState<string[]>([])
+
+  const sidebarItems = [
+    { title: "Dashboard", href: "/dashboard/student", icon: "🏠" },
+    { title: "My Courses", href: "/dashboard/student/courses", icon: "📚" },
+    { title: "Assignments", href: "/dashboard/student/assignments", icon: "📋" },
+    { title: "Quizzes", href: "/dashboard/student/assessments", icon: "✍️", badge: pendingQuizCount },
+    { title: "Gamification", href: "/dashboard/student/gamification", icon: "🎮" },
+    { title: "Progress", href: "/dashboard/student/progress", icon: "📊" },
+  ]
+
+  useEffect(() => {
+    if (session?.user?.id) {
+      fetch(`/api/student/${(session.user as any).id}/dashboard`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            if (data.data?.stats) {
+              setPendingQuizCount(data.data.stats.pendingQuizzesCount || undefined)
+            }
+            if (data.data?.gamification) {
+              setPoints(data.data.gamification.points || 0)
+              // We could also set badges here if we mapped them to the UI format
+            }
+          }
+        })
+        .catch(err => console.error("Stats fetch error", err))
+    }
+  }, [session?.user])
 
   useEffect(() => {
     if (selectedBadge?.earned) {

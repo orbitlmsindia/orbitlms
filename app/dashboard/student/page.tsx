@@ -11,14 +11,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 
-const sidebarItems = [
-  { title: "Dashboard", href: "/dashboard/student", icon: "🏠" },
-  { title: "My Courses", href: "/dashboard/student/courses", icon: "📚" },
-  { title: "Assignments", href: "/dashboard/student/assignments", icon: "📋" },
-  { title: "Quizzes", href: "/dashboard/student/assessments", icon: "✍️", badge: 3 },
-  { title: "Gamification", href: "/dashboard/student/gamification", icon: "🎮" },
-  { title: "Progress", href: "/dashboard/student/progress", icon: "📊" },
-]
+
+
+import { LayoutDashboard, BookOpen, FileText, CheckSquare, Gamepad2, BarChart } from "lucide-react"
 
 interface DashboardData {
   profile: any
@@ -26,6 +21,7 @@ interface DashboardData {
     activeCourses: number
     avgProgress: number
     pendingTasks: number
+    pendingQuizzesCount?: number
     attendancePercentage: number
     totalPoints: number
     rank: number
@@ -37,7 +33,6 @@ interface DashboardData {
     badges: any[]
   }
 }
-
 export default function StudentDashboard() {
   const router = useRouter()
   const { data: session, status, update } = useSession()
@@ -45,6 +40,15 @@ export default function StudentDashboard() {
   const [hoveredCourse, setHoveredCourse] = useState<string | null>(null)
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
+
+  const sidebarItems = [
+    { title: "Dashboard", href: "/dashboard/student", icon: <LayoutDashboard size={24} /> },
+    { title: "My Courses", href: "/dashboard/student/courses", icon: <BookOpen size={24} /> },
+    { title: "Assignments", href: "/dashboard/student/assignments", icon: <FileText size={24} /> },
+    { title: "Quizzes", href: "/dashboard/student/assessments", icon: <CheckSquare size={24} />, badge: data?.stats?.pendingQuizzesCount || undefined },
+    { title: "Gamification", href: "/dashboard/student/gamification", icon: <Gamepad2 size={24} /> },
+    { title: "Progress", href: "/dashboard/student/progress", icon: <BarChart size={24} /> },
+  ]
 
   const fetchDashboardData = useCallback(async () => {
     // If we have a session but no ID, this is a problem

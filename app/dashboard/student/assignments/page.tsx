@@ -16,15 +16,7 @@ import { Upload, FileText, CheckCircle, Clock, AlertCircle, X, File as FileIcon,
 import { cn } from "@/lib/utils"
 
 // Sidebar items with the new Assignments module
-const sidebarItems = [
-    { title: "Dashboard", href: "/dashboard/student", icon: "🏠" },
-    { title: "My Courses", href: "/dashboard/student/courses", icon: "📚" },
-    { title: "Assignments", href: "/dashboard/student/assignments", icon: "📋" },
-    { title: "Quizzes", href: "/dashboard/student/assessments", icon: "✍️", badge: 3 },
 
-    { title: "Gamification", href: "/dashboard/student/gamification", icon: "🎮" },
-    { title: "Progress", href: "/dashboard/student/progress", icon: "📊" },
-]
 
 interface Assignment {
     id: string
@@ -98,6 +90,16 @@ export default function AssignmentsPage() {
     const [isUploading, setIsUploading] = useState(false)
     const [loading, setLoading] = useState(true)
     const [searchQuery, setSearchQuery] = useState("")
+    const [pendingQuizCount, setPendingQuizCount] = useState<number | undefined>(undefined)
+
+    const sidebarItems = [
+        { title: "Dashboard", href: "/dashboard/student", icon: "🏠" },
+        { title: "My Courses", href: "/dashboard/student/courses", icon: "📚" },
+        { title: "Assignments", href: "/dashboard/student/assignments", icon: "📋" },
+        { title: "Quizzes", href: "/dashboard/student/assessments", icon: "✍️", badge: pendingQuizCount },
+        { title: "Gamification", href: "/dashboard/student/gamification", icon: "🎮" },
+        { title: "Progress", href: "/dashboard/student/progress", icon: "📊" },
+    ]
 
     const fetchAssignmentsData = useCallback(async () => {
         if (!user?.id) return
@@ -105,9 +107,18 @@ export default function AssignmentsPage() {
         try {
             setLoading(true)
 
-            // 1. Fetch Student Enrollments
-            const enrollRes = await fetch(`/api/enrollments?studentId=${user.id}`);
+            // 1. Fetch Student Enrollments & Dashboard Stats (for sidebar badge)
+            const [enrollRes, dashboardRes] = await Promise.all([
+                fetch(`/api/enrollments?studentId=${user.id}`),
+                fetch(`/api/student/${user.id}/dashboard`)
+            ]);
+
             const enrollResult = await enrollRes.json();
+            const dashboardResult = await dashboardRes.json();
+
+            if (dashboardResult.success && dashboardResult.data?.stats) {
+                setPendingQuizCount(dashboardResult.data.stats.pendingQuizzesCount || undefined);
+            }
 
             let enrolledCourseIds: string[] = [];
             if (enrollResult.success && enrollResult.data) {
@@ -127,6 +138,10 @@ export default function AssignmentsPage() {
                 const submissions = subResult.data || [];
                 let allAssignments = assignResult.data || [];
 
+                // Client-side enrollment filtering removed. 
+                // We display ALL assignments for the student's Institute (as returned by the API).
+
+                /* 
                 // Filter assignments by enrolled courses
                 if (enrolledCourseIds.length > 0) {
                     allAssignments = allAssignments.filter((a: any) => {
@@ -134,11 +149,9 @@ export default function AssignmentsPage() {
                         return enrolledCourseIds.includes(courseId);
                     });
                 } else {
-                    // If no enrollments, show no assignments? Or show all public? 
-                    // Requirement says: "Show only assignments: Of the courses the student is enrolled in"
-                    // So if no enrollments, empty list.
                     allAssignments = [];
                 }
+                */
 
                 const mappedAssignments = allAssignments.map((a: any) => {
                     // Robust ID matching handling both string and object formats

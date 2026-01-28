@@ -5,14 +5,15 @@ import { useSession } from "next-auth/react"
 import { HeaderNav } from "@/components/header-nav"
 import { SidebarNav } from "@/components/sidebar-nav"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { TrendingUp, Users, Target, Activity } from "lucide-react"
+import { TrendingUp, Users, Target, Activity, LayoutDashboard, BarChart, LineChart, Zap, Award } from "lucide-react"
 
 const sidebarItems = [
-    { title: "Dashboard", href: "/dashboard/manager", icon: "ÃƒÂ°Ã…Â¸Ã‚ÂÃ‚Â " },
-    { title: "Reports", href: "/dashboard/manager/reports", icon: "ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â " },
-    { title: "Analytics", href: "/dashboard/manager/analytics", icon: "ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‹â€ " },
-    { title: "Performance", href: "/dashboard/manager/performance", icon: "ÃƒÂ¢Ã…Â¡Ã‚Â¡" },
-    { title: "Certificates", href: "/dashboard/manager/certificates", icon: "ÃƒÂ°Ã…Â¸Ã‚ÂÃ¢â‚¬Â " },
+    { title: "Dashboard", href: "/dashboard/manager", icon: <LayoutDashboard size={24} /> },
+    { title: "Users", href: "/dashboard/manager/users", icon: <Users size={24} /> },
+    { title: "Reports", href: "/dashboard/manager/reports", icon: <BarChart size={24} /> },
+    { title: "Analytics", href: "/dashboard/manager/analytics", icon: <LineChart size={24} /> },
+    { title: "Performance", href: "/dashboard/manager/performance", icon: <Zap size={24} /> },
+    { title: "Certificates", href: "/dashboard/manager/certificates", icon: <Award size={24} /> },
 ]
 
 export default function ManagerAnalyticsPage() {

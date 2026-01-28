@@ -8,15 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-const sidebarItems = [
-  { title: "Dashboard", href: "/dashboard/student", icon: "🏠" },
-  { title: "My Courses", href: "/dashboard/student/courses", icon: "📚" },
-  { title: "Assignments", href: "/dashboard/student/assignments", icon: "📋" },
-  { title: "Quizzes", href: "/dashboard/student/assessments", icon: "✍️", badge: 3 },
 
-  { title: "Gamification", href: "/dashboard/student/gamification", icon: "🎮" },
-  { title: "Progress", href: "/dashboard/student/progress", icon: "📊" },
-]
 
 interface Assessment {
   id: string
@@ -49,67 +41,48 @@ export default function AssessmentsPage() {
 
     try {
       setLoading(true)
-      // 1. Fetch Student's Enrollments to get Course IDs
-      const enrollRes = await fetch(`/api/enrollments?studentId=${user.id}`)
-      const enrollJson = await enrollRes.json()
 
-      let enrolledCourseIds: string[] = []
-      if (enrollJson.success) {
-        // Safely extract course ID
-        enrolledCourseIds = enrollJson.data
-          .map((e: any) => {
-            const course = e.course;
-            if (!course) return null;
-            return (course._id || course).toString()
-          })
-          .filter((id: string | null) => id !== null)
-      }
-
-      if (enrolledCourseIds.length === 0) {
-        setAssessmentsData([])
-        setLoading(false)
-        return
-      }
-
-      // 2. Fetch All Assessments (Quizzes) for these Courses
-      // We need an endpoint that accepts courseIds or we filter client side if API returns all.
-      // Assuming we can fetch all and filter, or a specific endpoint exists.
-      // Let's try fetching from /api/assessments and filtering by course.
-      // Ideally backend should support filtering.
+      // 1. Fetch All Assessments (Quizzes) for the Institute
+      // The API already filters by instituteId and published status for students
       const assessRes = await fetch(`/api/assessments`)
       const assessJson = await assessRes.json()
 
       let allAssessments: any[] = []
       if (assessJson.success) {
-        allAssessments = assessJson.data.filter((a: any) => {
-          const aCourseId = (a.course?._id || a.course).toString();
-          return enrolledCourseIds.includes(aCourseId);
-        })
+        allAssessments = assessJson.data
       }
 
-      // 3. Fetch Student's Results
+      // 2. Fetch Student's Results
       const resultsRes = await fetch(`/api/assessment-results?studentId=${user.id}`)
       const resultsJson = await resultsRes.json()
       const results = resultsJson.success ? resultsJson.data : []
 
-      // 4. Merge Data
+      // 3. Merge Data
       const mergedData: Assessment[] = allAssessments.map((assessment: any) => {
         // Find if user has a result for this assessment
-        // assessment.id might be _id
         const result = results.find((r: any) => r.assessment === assessment._id)
 
         let status: "pending" | "submitted" | "graded" = "pending"
         let score = undefined
 
         if (result) {
-          status = 'graded' // Assessments are auto-graded usually
-          score = result.score
+          status = result.status === 'in-progress' ? 'pending' : 'graded'; // Handle in-progress as pending for list view or check logic
+          // Actually, if in-progress, maybe show as pending so they can resume?
+          // The existing logic was: if (result) { status = 'graded' ... }
+          // But now we support in-progress.
+          // Let's stick to simple logic for now: if result exists and is NOT in-progress, it is graded/submitted.
+          if (result.status === 'in-progress') {
+            status = 'pending';
+          } else {
+            status = 'graded';
+            score = result.score;
+          }
         }
 
         return {
           id: assessment._id,
           title: assessment.title,
-          course: assessment.courseName || "General", // You might need to populate this on backend or map it
+          course: (assessment.course && typeof assessment.course === 'object' && assessment.course.title) ? assessment.course.title : (assessment.courseName || "General"),
           type: assessment.type || "quiz",
           dueDate: assessment.dueDate ? new Date(assessment.dueDate).toLocaleDateString() : "No Due Date",
           status: status,
@@ -166,6 +139,15 @@ export default function AssessmentsPage() {
   })
 
   const pendingCount = assessmentsData.filter((a) => a.status === "pending").length
+
+  const sidebarItems = [
+    { title: "Dashboard", href: "/dashboard/student", icon: "🏠" },
+    { title: "My Courses", href: "/dashboard/student/courses", icon: "📚" },
+    { title: "Assignments", href: "/dashboard/student/assignments", icon: "📋" },
+    { title: "Quizzes", href: "/dashboard/student/assessments", icon: "✍️", badge: pendingCount > 0 ? pendingCount : undefined },
+    { title: "Gamification", href: "/dashboard/student/gamification", icon: "🎮" },
+    { title: "Progress", href: "/dashboard/student/progress", icon: "📊" },
+  ]
 
   return (
     <div className="flex h-screen bg-background">

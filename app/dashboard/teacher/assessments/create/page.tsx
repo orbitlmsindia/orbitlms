@@ -95,6 +95,48 @@ export default function CreateAssessmentPage() {
         setQuestions(questions.map(q => q.id === id ? { ...q, [field]: value } : q))
     }
 
+    useEffect(() => {
+        if (!isEditing) return;
+
+        const quizId = searchParams.get("id");
+        if (!quizId) return;
+
+        const fetchQuiz = async () => {
+            try {
+                setLoading(true);
+                const res = await fetch(`/api/assessments/${quizId}`);
+                const json = await res.json();
+
+                if (json.success) {
+                    const data = json.data;
+                    setTitle(data.title);
+                    setMode(data.type === 'assignment' ? 'assignment' : 'quiz'); // Assuming type maps mostly to quiz, handling valid types
+                    if (data.description) setDescription(data.description);
+                    if (data.course) setSelectedCourse(data.course.title || data.course); // Handle populated or raw ID, preferably Title now that we use Input
+                    if (data.dueDate) setDueDate(new Date(data.dueDate).toISOString().split('T')[0]);
+                    if (data.questions) setQuestions(data.questions.map((q: any) => ({
+                        ...q,
+                        id: q._id || q.id || `q-${Math.random().toString(36).substr(2, 9)}`,
+                        correctAnswer: q.correctAnswer?.toString() || "0"
+                    })));
+                    if (data.timeLimit || data.duration) setDuration(data.timeLimit || data.duration);
+
+                    // If type is not basic quiz, handle assignment specific if needed
+                    // But 'mode' state handles UI toggle.
+                } else {
+                    toast.error("Failed to load quiz details");
+                }
+            } catch (error) {
+                console.error("Error fetching quiz:", error);
+                toast.error("Error loading quiz");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchQuiz();
+    }, [isEditing, searchParams]);
+
     const handlePublish = async () => {
         if (!title || !selectedCourse || !dueDate) {
             toast.error("Please fill in all required fields (Title, Course, Due Date)")
@@ -103,38 +145,51 @@ export default function CreateAssessmentPage() {
 
         setLoading(true)
         try {
-            const endpoint = mode === 'quiz' ? '/api/assessments' : '/api/assignments'
+            const endpoint = isEditing ? `/api/assessments/${searchParams.get("id")}` : (mode === 'quiz' ? '/api/assessments' : '/api/assignments')
+            const method = isEditing ? 'PUT' : 'POST'
 
-            const payload = mode === 'quiz' ? {
+            // Standardize payload
+            const payload: any = {
                 title,
-                course: selectedCourse,
-                type: 'quiz',
-                questions: questions.map(q => ({
+                course: courses.find(c => c.title === selectedCourse)?._id || selectedCourse, // Send ID if matches known course, else Title
+                type: mode === 'assignment' ? 'assignment' : 'quiz', // Simplified mapping based on UI mode
+                dueDate: new Date(dueDate).toISOString(),
+                description, // Add description for both
+                status: 'published' // Ensure published as per requirements
+            }
+
+            if (mode === 'quiz') {
+                payload.questions = questions.map(q => ({
                     text: q.text,
                     options: q.options,
-                    correctAnswer: parseInt(q.correctAnswer || "0")
-                })),
-                duration
-            } : {
-                title,
-                description,
-                course: selectedCourse,
-                dueDate: new Date(dueDate).toISOString(),
-                teacher: (session?.user as any).id
+                    correctAnswer: parseInt(q.correctAnswer || "0"),
+                    type: q.type,
+                    marks: q.marks
+                }));
+                payload.timeLimit = duration;
+                payload.duration = duration; // Sync
+            } else {
+                // Assignment specific extra fields if any
+            }
+
+            if (!isEditing) {
+                // Add teacher ID only on create if not handled by session consistency in backend, 
+                // but backend overwrites it from session usually.
+                payload.teacher = (session?.user as any).id
             }
 
             const res = await fetch(endpoint, {
-                method: 'POST',
+                method: method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             })
 
             const result = await res.json()
             if (result.success) {
-                toast.success(`${mode === 'quiz' ? 'Assessment' : 'Assignment'} published successfully!`)
+                toast.success(`${mode === 'quiz' ? 'Assessment' : 'Assignment'} ${isEditing ? 'updated' : 'published'} successfully!`)
                 router.push("/dashboard/teacher/assessments")
             } else {
-                toast.error(result.error || "Failed to publish")
+                toast.error(result.error || "Failed to save")
             }
         } catch (error) {
             toast.error("An error occurred")
@@ -275,7 +330,7 @@ export default function CreateAssessmentPage() {
                                                                         <Input
                                                                             className="h-8"
                                                                             placeholder={`Option ${oIdx + 1}`}
-                                                                            value={opt}
+                                                                            value={opt || ""}
                                                                             onChange={(e) => {
                                                                                 const newOpts = [...(q.options || [])];
                                                                                 newOpts[oIdx] = e.target.value;
@@ -320,14 +375,36 @@ export default function CreateAssessmentPage() {
                                     <CardContent className="space-y-4">
                                         <div className="space-y-2">
                                             <Label>Subject / Course</Label>
-                                            <Select value={selectedCourse} onValueChange={setSelectedCourse}>
-                                                <SelectTrigger><SelectValue placeholder="Select Course" /></SelectTrigger>
-                                                <SelectContent>
+                                            <div className="relative">
+                                                <div className="relative">
+                                                    <Input
+                                                        value={selectedCourse}
+                                                        onChange={(e) => setSelectedCourse(e.target.value)}
+                                                        placeholder="Select or type a course name..."
+                                                        className="w-full pr-10"
+                                                        list="course-options"
+                                                        autoComplete="off"
+                                                    />
+                                                    {courses.length > 0 && (
+                                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 opacity-50 pointer-events-none">
+                                                            <ChevronLeft className="w-4 h-4 rotate-270" style={{ transform: 'rotate(-90deg)' }} />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                {/* Built-in browser datalist for accessibility and simple behavior since standard Select is strict */}
+                                                <datalist id="course-options">
                                                     {courses.map(c => (
-                                                        <SelectItem key={c._id} value={c._id}>{c.title}</SelectItem>
+                                                        <option key={c._id} value={c.title} />
                                                     ))}
-                                                </SelectContent>
-                                            </Select>
+                                                </datalist>
+                                                {/* 
+                                                    Note: Using datalist is the simplest way to support "Select OR Type" 
+                                                    without introducing complex Combobox components that might break the "No UI Change" rule 
+                                                    by looking different or requiring new deps.
+                                                    However, datalist saves the VALUE (Title), not the ID.
+                                                    We need to handle the ID mapping in the backend or lookup.
+                                                 */}
+                                            </div>
                                         </div>
                                         <div className="space-y-2">
                                             <Label>Total Marks</Label>

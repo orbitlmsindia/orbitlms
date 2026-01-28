@@ -69,6 +69,28 @@ export async function PUT(req: Request, props: { params: Promise<{ id: string }>
 
         const updatedCourse = await Course.findByIdAndUpdate(courseId, body, { new: true });
 
+        // NOTIFICATION TRIGGER: Notify enrolled students about the update
+        try {
+            const Notification = (await import("@/models/Notification")).default;
+            const students = course.students || []; // Assuming students array is populated or exists on course document
+
+            if (students.length > 0) {
+                const notifications = students.map((studentId: any) => ({
+                    recipient: studentId,
+                    title: "Course Updated",
+                    message: `The course "${updatedCourse.title}" has been updated by the instructor. Check out the new content!`,
+                    type: "course_update",
+                    link: `/dashboard/student/courses/${updatedCourse._id}`
+                }));
+
+                await Notification.insertMany(notifications);
+                console.log(`[NOTIFY] Sent ${notifications.length} notifications for course update.`);
+            }
+        } catch (notifyError) {
+            console.error("Failed to send notifications:", notifyError);
+            // Don't fail the request if notifications fail
+        }
+
         return NextResponse.json({ success: true, data: updatedCourse });
     } catch (error: any) {
         return NextResponse.json({ success: false, error: error.message }, { status: 400 });

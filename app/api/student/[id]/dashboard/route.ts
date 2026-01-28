@@ -105,10 +105,29 @@ export async function GET(
                 // Ensure we handle the type check for assessment references
                 const attemptedAssessmentIds = assessmentResults.map(r => r.assessment.toString()); // Ensure string format
 
-                pendingQuizzes = await Assessment.find({
+                // Get total count of pending quizzes
+                // Filter by Enrolled Courses constraint AND Published Status
+                // Also ensure Institute Scope if possible (though course check usually covers it)
+                const pendingFilter: any = {
                     course: { $in: enrolledCourseIds },
-                    _id: { $nin: attemptedAssessmentIds }
-                }).populate('course', 'title').limit(3);
+                    _id: { $nin: attemptedAssessmentIds },
+                    status: 'published'
+                };
+
+                if (student.instituteId) {
+                    pendingFilter.instituteId = student.instituteId;
+                }
+
+                const pendingQuizzesCount = await Assessment.countDocuments(pendingFilter);
+
+                // Get list of upcoming quizzes (limited to 3)
+                pendingQuizzes = await Assessment.find(pendingFilter)
+                    .populate('course', 'title')
+                    .sort({ dueDate: 1, createdAt: -1 }) // Sort by due date usually makes sense
+                    .limit(3);
+
+                // Attach count to be used in stats
+                (pendingQuizzes as any).totalCount = pendingQuizzesCount;
             }
         } catch (e: any) {
             debugLogs.push(`Pending Calculation Error: ${e.message}`);
@@ -123,7 +142,8 @@ export async function GET(
                 stats: {
                     activeCourses: validEnrollments.length,
                     avgProgress: Math.round(avgProgress),
-                    pendingTasks: pendingAssignmentsCount + pendingQuizzes.length,
+                    pendingTasks: pendingAssignmentsCount + ((pendingQuizzes as any).totalCount || pendingQuizzes.length),
+                    pendingQuizzesCount: (pendingQuizzes as any).totalCount || 0,
                     attendancePercentage: Math.round(attendancePercentage),
                     totalPoints: gamification?.points || 0,
                     rank: 1,

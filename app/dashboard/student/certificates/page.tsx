@@ -6,18 +6,18 @@ import { HeaderNav } from "@/components/header-nav"
 import { SidebarNav } from "@/components/sidebar-nav"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Award, Download, ExternalLink, ShieldCheck } from "lucide-react"
+import { Award, Download, ExternalLink, ShieldCheck, LayoutDashboard, BookOpen, FileText, CheckSquare, BarChart, FlaskConical, Gamepad2 } from "lucide-react"
 
 const sidebarItems = [
-    { title: "Dashboard", href: "/dashboard/student", icon: "ÃƒÂ°Ã…Â¸Ã‚ÂÃ‚Â " },
-    { title: "My Courses", href: "/dashboard/student/courses", icon: "ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â¡" },
-    { title: "Assignments", href: "/dashboard/student/assignments", icon: "ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‚Â" },
-    { title: "Assessments", href: "/dashboard/student/assessments", icon: "ÃƒÂ¢Ã…â€œÃ‚ÂÃƒÂ¯Ã‚Â¸Ã‚Â", badge: 3 },
+    { title: "Dashboard", href: "/dashboard/student", icon: <LayoutDashboard size={24} /> },
+    { title: "My Courses", href: "/dashboard/student/courses", icon: <BookOpen size={24} /> },
+    { title: "Assignments", href: "/dashboard/student/assignments", icon: <FileText size={24} /> },
+    { title: "Assessments", href: "/dashboard/student/assessments", icon: <CheckSquare size={24} />, badge: 3 },
 
-    { title: "Progress", href: "/dashboard/student/progress", icon: "ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â " },
-    { title: "Certificates", href: "/dashboard/student/certificates", icon: "ÃƒÂ°Ã…Â¸Ã‚ÂÃ¢â‚¬Â " },
-    { title: "Virtual Labs", href: "/dashboard/student/virtual-labs", icon: "ÃƒÂ°Ã…Â¸Ã‚Â§Ã‚Âª" },
-    { title: "Gamification", href: "/dashboard/student/gamification", icon: "ÃƒÂ°Ã…Â¸Ã…Â½Ã‚Â®" },
+    { title: "Progress", href: "/dashboard/student/progress", icon: <BarChart size={24} /> },
+    { title: "Certificates", href: "/dashboard/student/certificates", icon: <Award size={24} /> },
+    { title: "Virtual Labs", href: "/dashboard/student/virtual-labs", icon: <FlaskConical size={24} /> },
+    { title: "Gamification", href: "/dashboard/student/gamification", icon: <Gamepad2 size={24} /> },
 ]
 
 export default function StudentCertificatesPage() {
@@ -55,7 +55,7 @@ export default function StudentCertificatesPage() {
                                             <Badge variant="outline" className="text-[10px] font-mono">{cert.id}</Badge>
                                         </div>
                                         <CardTitle className="mt-4">{cert.title}</CardTitle>
-                                        <CardDescription>Issued by {cert.issuer} ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ {cert.date}</CardDescription>
+                                        <CardDescription>Issued by {cert.issuer} • {cert.date}</CardDescription>
                                     </CardHeader>
                                     <CardContent>
                                         <div className="flex gap-2">

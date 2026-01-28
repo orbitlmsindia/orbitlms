@@ -20,15 +20,21 @@ const AssessmentResultSchema = new mongoose.Schema({
     },
     status: {
         type: String,
-        enum: ['completed', 'failed', 'passed'],
+        enum: ['in-progress', 'completed', 'failed', 'passed'],
         required: true,
+        default: 'in-progress'
     },
     answers: [{
         questionId: String,
         selectedOption: Number,
         isCorrect: Boolean
     }],
-    attemptedAt: {
+    startedAt: {
+        type: Date,
+        default: Date.now,
+    },
+    completedAt: Date,
+    attemptedAt: { // Legacy, same as startedAt usually
         type: Date,
         default: Date.now,
     },

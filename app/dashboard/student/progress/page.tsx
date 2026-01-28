@@ -2,20 +2,13 @@
 
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
+import { useState, useEffect } from "react"
 import { HeaderNav } from "@/components/header-nav"
 import { SidebarNav } from "@/components/sidebar-nav"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
-const sidebarItems = [
-  { title: "Dashboard", href: "/dashboard/student", icon: "🏠" },
-  { title: "My Courses", href: "/dashboard/student/courses", icon: "📚" },
-  { title: "Assignments", href: "/dashboard/student/assignments", icon: "📋" },
-  { title: "Quizzes", href: "/dashboard/student/assessments", icon: "✍️", badge: 3 },
 
-  { title: "Gamification", href: "/dashboard/student/gamification", icon: "🎮" },
-  { title: "Progress", href: "/dashboard/student/progress", icon: "📊" },
-]
 
 interface CourseProgress {
   courseId: string
@@ -60,6 +53,29 @@ const courseProgressData: CourseProgress[] = [
 export default function ProgressPage() {
   const router = useRouter()
   const { data: session } = useSession()
+  const [pendingQuizCount, setPendingQuizCount] = useState<number | undefined>(undefined)
+
+  const sidebarItems = [
+    { title: "Dashboard", href: "/dashboard/student", icon: "🏠" },
+    { title: "My Courses", href: "/dashboard/student/courses", icon: "📚" },
+    { title: "Assignments", href: "/dashboard/student/assignments", icon: "📋" },
+    { title: "Quizzes", href: "/dashboard/student/assessments", icon: "✍️", badge: pendingQuizCount },
+    { title: "Gamification", href: "/dashboard/student/gamification", icon: "🎮" },
+    { title: "Progress", href: "/dashboard/student/progress", icon: "📊" },
+  ]
+
+  useEffect(() => {
+    if (session?.user?.id) {
+      fetch(`/api/student/${(session.user as any).id}/dashboard`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.data?.stats) {
+            setPendingQuizCount(data.data.stats.pendingQuizzesCount || undefined)
+          }
+        })
+        .catch(err => console.error("Stats fetch error", err))
+    }
+  }, [session?.user])
 
   const overallProgress = Math.round(
     courseProgressData.reduce((sum, c) => sum + c.progress, 0) / courseProgressData.length,

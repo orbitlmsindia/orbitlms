@@ -37,7 +37,7 @@ export function HeaderNav({ userName, userRole, userImage, onLogout }: HeaderNav
       const data = await res.json()
       if (data.success) {
         setNotifications(data.data)
-        setUnreadCount(data.data.filter((n: any) => !n.isRead).length)
+        setUnreadCount(data.data.filter((n: any) => !n.read).length)
       }
     } catch (error) {
       console.error("Failed to fetch notifications")
@@ -47,16 +47,16 @@ export function HeaderNav({ userName, userRole, userImage, onLogout }: HeaderNav
   const markAllAsRead = async (e: React.MouseEvent) => {
     e.preventDefault()
     if (!session?.user) return
-    const unreadIds = notifications.filter(n => !n.isRead).map(n => n._id)
+    const unreadIds = notifications.filter(n => !n.read).map(n => n._id)
     if (unreadIds.length === 0) return
 
     try {
       await fetch('/api/notifications', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: unreadIds })
+        body: JSON.stringify({ all: true }) // Using 'all' flag for efficiency as supported by API
       })
-      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })))
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })))
       setUnreadCount(0)
     } catch (error) {
       toast.error("Failed to update notifications")
@@ -121,9 +121,9 @@ export function HeaderNav({ userName, userRole, userImage, onLogout }: HeaderNav
                   </div>
                 ) : (
                   notifications.map((notif: any) => (
-                    <DropdownMenuItem key={notif._id} className={`flex flex-col items-start gap-1 p-3 rounded-xl cursor-pointer ${!notif.isRead ? 'bg-primary/5' : ''}`}>
+                    <DropdownMenuItem key={notif._id} className={`flex flex-col items-start gap-1 p-3 rounded-xl cursor-pointer ${!notif.read ? 'bg-primary/5' : ''}`}>
                       <div className="flex justify-between w-full">
-                        <span className={`text-sm font-bold ${!notif.isRead ? 'text-primary' : 'text-foreground'}`}>
+                        <span className={`text-sm font-bold ${!notif.read ? 'text-primary' : 'text-foreground'}`}>
                           {notif.title}
                         </span>
                         <span className="text-[10px] text-muted-foreground">{new Date(notif.createdAt).toLocaleDateString()}</span>

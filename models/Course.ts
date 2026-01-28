@@ -53,6 +53,8 @@ const CourseSchema = new mongoose.Schema({
         required: true,
     },
     instituteName: String,
+    type: { type: String, default: 'standard' }, // standard, custom
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 
 export default mongoose.models.Course || mongoose.model('Course', CourseSchema);

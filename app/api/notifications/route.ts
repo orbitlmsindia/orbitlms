@@ -1,51 +1,53 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/lib/db";
 import Notification from "@/models/Notification";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 
-export async function GET(request: Request) {
+// GET: Fetch user's notifications
+export async function GET(req: Request) {
     try {
-        await connectDB();
-        const { searchParams } = new URL(request.url);
-        const userId = searchParams.get('userId');
-
-        if (!userId) {
-            return NextResponse.json({ success: false, error: "UserId required" }, { status: 400 });
+        const session = await getServerSession(authOptions);
+        if (!session || !session.user) {
+            return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
         }
 
-        const notifications = await Notification.find({ user: userId }).sort({ createdAt: -1 }).limit(20);
+        await connectDB();
 
-        return NextResponse.json({ success: true, data: notifications });
+        const notifications = await Notification.find({ recipient: session.user.id })
+            .sort({ createdAt: -1 })
+            .limit(20);
+
+        const unreadCount = await Notification.countDocuments({ recipient: session.user.id, read: false });
+
+        return NextResponse.json({ success: true, data: notifications, unread: unreadCount });
     } catch (error: any) {
-        return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }
 
-export async function PUT(request: Request) {
+// PUT: Mark as read
+export async function PUT(req: Request) {
     try {
-        await connectDB();
-        const body = await request.json();
-        const { ids } = body; // Array of IDs to mark read
+        const session = await getServerSession(authOptions);
+        if (!session || !session.user) {
+            return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
+        }
 
-        if (ids && Array.isArray(ids)) {
+        await connectDB();
+        const { id, all } = await req.json();
+
+        if (all) {
             await Notification.updateMany(
-                { _id: { $in: ids } },
-                { $set: { isRead: true } }
+                { recipient: session.user.id, read: false },
+                { read: true }
             );
+        } else if (id) {
+            await Notification.findByIdAndUpdate(id, { read: true });
         }
 
         return NextResponse.json({ success: true });
     } catch (error: any) {
-        return NextResponse.json({ success: false, error: error.message }, { status: 400 });
-    }
-}
-
-export async function POST(request: Request) {
-    try {
-        await connectDB();
-        const body = await request.json();
-        const notification = await Notification.create(body);
-        return NextResponse.json({ success: true, data: notification });
-    } catch (error: any) {
-        return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+        return NextResponse.json({ success: false, error: error.message }, { status: 500 });
     }
 }

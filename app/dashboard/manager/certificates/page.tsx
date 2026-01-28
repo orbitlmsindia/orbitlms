@@ -6,15 +6,16 @@ import { HeaderNav } from "@/components/header-nav"
 import { SidebarNav } from "@/components/sidebar-nav"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Award, Search, Filter, ShieldCheck } from "lucide-react"
+import { Award, Search, Filter, ShieldCheck, LayoutDashboard, Users, BarChart, LineChart, Zap } from "lucide-react"
 import { Input } from "@/components/ui/input"
 
 const sidebarItems = [
-    { title: "Dashboard", href: "/dashboard/manager", icon: "🏠" },
-    { title: "Reports", href: "/dashboard/manager/reports", icon: "📊" },
-    { title: "Analytics", href: "/dashboard/manager/analytics", icon: "📈" },
-    { title: "Performance", href: "/dashboard/manager/performance", icon: "⚡" },
-    { title: "Certificates", href: "/dashboard/manager/certificates", icon: "🏆" },
+    { title: "Dashboard", href: "/dashboard/manager", icon: <LayoutDashboard size={24} /> },
+    { title: "Users", href: "/dashboard/manager/users", icon: <Users size={24} /> },
+    { title: "Reports", href: "/dashboard/manager/reports", icon: <BarChart size={24} /> },
+    { title: "Analytics", href: "/dashboard/manager/analytics", icon: <LineChart size={24} /> },
+    { title: "Performance", href: "/dashboard/manager/performance", icon: <Zap size={24} /> },
+    { title: "Certificates", href: "/dashboard/manager/certificates", icon: <Award size={24} /> },
 ]
 
 export default function ManagerCertificatesPage() {

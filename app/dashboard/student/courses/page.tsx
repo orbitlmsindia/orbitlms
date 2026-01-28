@@ -13,14 +13,7 @@ import { toast } from "sonner"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
 
-const sidebarItems = [
-  { title: "Dashboard", href: "/dashboard/student", icon: "🏠" },
-  { title: "My Courses", href: "/dashboard/student/courses", icon: "📚" },
-  { title: "Assignments", href: "/dashboard/student/assignments", icon: "📋" },
-  { title: "Quizzes", href: "/dashboard/student/assessments", icon: "✍️", badge: 3 },
-  { title: "Gamification", href: "/dashboard/student/gamification", icon: "🎮" },
-  { title: "Progress", href: "/dashboard/student/progress", icon: "📊" },
-]
+
 
 interface CourseType {
   id: string
@@ -46,13 +39,34 @@ export default function CoursesPage() {
   const [availableCourses, setAvailableCourses] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
+  const [pendingQuizCount, setPendingQuizCount] = useState<number | undefined>(undefined)
+
+  const sidebarItems = [
+    { title: "Dashboard", href: "/dashboard/student", icon: "🏠" },
+    { title: "My Courses", href: "/dashboard/student/courses", icon: "📚" },
+    { title: "Assignments", href: "/dashboard/student/assignments", icon: "📋" },
+    { title: "Quizzes", href: "/dashboard/student/assessments", icon: "✍️", badge: pendingQuizCount },
+    { title: "Gamification", href: "/dashboard/student/gamification", icon: "🎮" },
+    { title: "Progress", href: "/dashboard/student/progress", icon: "📊" },
+  ]
 
   const fetchEnrolledCourses = async () => {
     if (!session?.user) return
     try {
       const userId = (session.user as any).id
-      const res = await fetch(`/api/enrollments?studentId=${userId}`)
+      // Fetch Enrollments and Dashboard Stats (for sidebar badge)
+      const [res, dashboardRes] = await Promise.all([
+        fetch(`/api/enrollments?studentId=${userId}`),
+        fetch(`/api/student/${userId}/dashboard`)
+      ])
+
       const data = await res.json()
+      const dashboardResult = await dashboardRes.json()
+
+      if (dashboardResult.success && dashboardResult.data?.stats) {
+        setPendingQuizCount(dashboardResult.data.stats.pendingQuizzesCount || undefined);
+      }
+
       if (data.success) {
         const mappedCourses = data.data
           .filter((enrollment: any) => enrollment.course) // Safety check for deleted courses

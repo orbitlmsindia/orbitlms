@@ -56,11 +56,16 @@ export async function POST(req: Request) {
                 let newProgress = (completedCount / totalLessons) * 100;
                 if (newProgress > 100) newProgress = 100; // Cap at 100
 
+                console.log(`[PROGRESS] Course: ${courseId}, Student: ${session.user.id}`);
+                console.log(`[PROGRESS] Completed: ${completedCount} / ${totalLessons} = ${newProgress}%`);
+
                 enrollment.progress = Math.round(newProgress);
 
                 if (enrollment.progress === 100) {
                     enrollment.completed = true;
                 }
+            } else {
+                console.log(`[PROGRESS LOG] Total lessons is 0 for course ${courseId}`);
             }
         }
 

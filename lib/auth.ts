@@ -14,6 +14,7 @@ export const authOptions: NextAuthOptions = {
             },
             async authorize(credentials) {
                 if (!credentials?.email || !credentials?.password) {
+                    console.log("[Auth] Missing credentials");
                     throw new Error("Invalid credentials");
                 }
 
@@ -21,18 +22,23 @@ export const authOptions: NextAuthOptions = {
                 const user = await User.findOne({ email: credentials.email }).select("+password");
 
                 if (!user || !user.password) {
+                    console.log(`[Auth] User not found or no password for email: ${credentials.email}`);
                     throw new Error("User not found");
                 }
 
                 if (user.status !== 'active') {
+                    console.log(`[Auth] User status is not active: ${user.status}`);
                     throw new Error(user.status === 'pending' ? "Account pending approval" : "Account is inactive/rejected");
                 }
 
                 const isPasswordMatch = await bcrypt.compare(credentials.password, user.password);
 
                 if (!isPasswordMatch) {
+                    console.log(`[Auth] Password mismatch for user: ${credentials.email}`);
                     throw new Error("Incorrect password");
                 }
+
+                console.log(`[Auth] Login successful for: ${credentials.email}`);
 
                 return {
                     id: user._id.toString(),

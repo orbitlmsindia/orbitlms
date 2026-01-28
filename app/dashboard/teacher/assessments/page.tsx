@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Plus, Search, Calendar, Clock, FileText, CheckCircle, MoreVertical } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { toast } from "sonner"
 
 const sidebarItems = [
     { title: "Dashboard", href: "/dashboard/teacher", icon: "🏠" },
@@ -98,7 +99,9 @@ export default function TeacherAssessmentsPage() {
                     subject: a.course?.title || "N/A",
                     type: "Quiz",
                     dueDate: new Date(a.createdAt).toLocaleDateString(),
-                    submissions: (resultsData.data || []).filter((r: any) => r.assessment && r.assessment._id === a._id).length,
+                    submissions: (resultsData.data || []).filter((r: any) =>
+                        (r.assessment === a._id || r.assessment?._id === a._id)
+                    ).length,
                     totalStudents: a.course?.students?.length || 0,
                     status: "Published"
                 }))
@@ -109,7 +112,9 @@ export default function TeacherAssessmentsPage() {
                     subject: a.course?.title || "N/A",
                     type: "Assignment",
                     dueDate: new Date(a.dueDate).toLocaleDateString(),
-                    submissions: (subsData.data || []).filter((s: any) => s.assignment && s.assignment._id === a._id).length,
+                    submissions: (subsData.data || []).filter((s: any) =>
+                        (s.assignment === a._id || s.assignment?._id === a._id)
+                    ).length,
                     totalStudents: a.course?.students?.length || 0,
                     status: "Published"
                 }))
@@ -137,6 +142,26 @@ export default function TeacherAssessmentsPage() {
         a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         a.subject.toLowerCase().includes(searchQuery.toLowerCase())
     )
+
+    const handleDelete = async (id: string, type: string) => {
+        const endpoint = type === "Quiz" ? `/api/assessments/${id}` : `/api/assignments/${id}`
+
+        try {
+            const res = await fetch(endpoint, {
+                method: "DELETE",
+            })
+            const data = await res.json()
+
+            if (data.success) {
+                toast.success(`${type} deleted successfully`)
+                setItems(prev => prev.filter(item => item.id !== id))
+            } else {
+                toast.error(data.error || "Failed to delete")
+            }
+        } catch (error) {
+            toast.error("An error occurred while deleting")
+        }
+    }
 
     return (
         <div className="flex h-screen bg-background">
@@ -201,7 +226,15 @@ export default function TeacherAssessmentsPage() {
                                                     <DropdownMenuItem onClick={(e) => { e.stopPropagation(); router.push(`/dashboard/teacher/assessments/create?id=${assessment.id}`) }}>
                                                         Edit
                                                     </DropdownMenuItem>
-                                                    <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
+                                                    <DropdownMenuItem
+                                                        className="text-destructive focus:text-destructive cursor-pointer"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleDelete(assessment.id, assessment.type)
+                                                        }}
+                                                    >
+                                                        Delete
+                                                    </DropdownMenuItem>
                                                 </DropdownMenuContent>
                                             </DropdownMenu>
                                         </div>

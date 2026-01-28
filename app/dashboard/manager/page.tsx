@@ -9,15 +9,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "sonner"
-import { Check, X } from "lucide-react"
+import { Check, X, LayoutDashboard, Users, BarChart, LineChart, Zap, Award } from "lucide-react"
 
 const sidebarItems = [
-  { title: "Dashboard", href: "/dashboard/manager", icon: "🏠" },
-  { title: "Users", href: "/dashboard/manager/users", icon: "👥" },
-  { title: "Reports", href: "/dashboard/manager/reports", icon: "📊" },
-  { title: "Analytics", href: "/dashboard/manager/analytics", icon: "📈" },
-  { title: "Performance", href: "/dashboard/manager/performance", icon: "⚡" },
-  { title: "Certificates", href: "/dashboard/manager/certificates", icon: "🏆" },
+  { title: "Dashboard", href: "/dashboard/manager", icon: <LayoutDashboard size={24} /> },
+  { title: "Users", href: "/dashboard/manager/users", icon: <Users size={24} /> },
+  { title: "Reports", href: "/dashboard/manager/reports", icon: <BarChart size={24} /> },
+  { title: "Analytics", href: "/dashboard/manager/analytics", icon: <LineChart size={24} /> },
+  { title: "Performance", href: "/dashboard/manager/performance", icon: <Zap size={24} /> },
+  { title: "Certificates", href: "/dashboard/manager/certificates", icon: <Award size={24} /> },
 ]
 
 export default function ManagerDashboard() {

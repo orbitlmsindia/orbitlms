@@ -29,13 +29,60 @@ export default function AssessmentDetailPage() {
     const [resultData, setResultData] = useState<any>(null)
     const [saving, setSaving] = useState(false)
 
-    // Fetch Data
+    // Timer Logic
+    useEffect(() => {
+        let timer: NodeJS.Timeout
+        if (status === 'active' && timeLeft > 0) {
+            timer = setInterval(() => {
+                setTimeLeft((prev) => {
+                    if (prev <= 1) {
+                        handleSubmit()
+                        return 0
+                    }
+                    return prev - 1
+                })
+            }, 1000)
+        } else if (status === 'active' && timeLeft === 0) {
+            // Ensure we don't loop submit
+            if (!saving) handleSubmit()
+        }
+        return () => clearInterval(timer)
+    }, [status, timeLeft, saving])
+
+    const handleStart = async () => {
+        if (!session?.user) return
+
+        try {
+            // Call API to start quiz
+            const res = await fetch('/api/assessment-results', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    student: (session.user as any).id,
+                    assessment: id,
+                    status: 'in-progress'
+                })
+            })
+            const json = await res.json()
+            if (json.success) {
+                setResultData(json.data)
+                setStatus('active')
+                // Reset timer based on new start
+                const duration = assessment.timeLimit || assessment.duration || 30
+                setTimeLeft(duration * 60)
+            } else {
+                toast.error("Failed to start quiz")
+            }
+        } catch (e) {
+            toast.error("Error starting quiz")
+        }
+    }
+
+    // Refined Fetch Logic for Resume
     const fetchData = useCallback(async () => {
         if (!session?.user || !id) return
 
         try {
-            setStatus('loading')
-
             // 1. Fetch Assessment Details
             const assessRes = await fetch(`/api/assessments/${id}`)
             const assessJson = await assessRes.json()
@@ -49,7 +96,10 @@ export default function AssessmentDetailPage() {
             const assessData = assessJson.data
             setAssessment(assessData)
             setQuestions(assessData.questions || [])
-            setTimeLeft((assessData.duration || 30) * 60)
+
+            // Default duration
+            const durationMinutes = assessData.timeLimit || assessData.duration || 30
+            setTimeLeft(durationMinutes * 60)
 
             // 2. Check for existing result
             const user = session.user as any
@@ -57,28 +107,47 @@ export default function AssessmentDetailPage() {
             const resultJson = await resultRes.json()
 
             if (resultJson.success) {
-                // Find result for THIS assessment
                 const existingResult = resultJson.data.find((r: any) =>
-                    r.assessment === id || (typeof r.assessment === 'object' && r.assessment._id === id)
+                    // Match ID directly or via object
+                    (r.assessment === id || (typeof r.assessment === 'object' && r.assessment._id === id))
                 )
 
                 if (existingResult) {
                     setResultData(existingResult)
-                    // Reconstruct answers array from existing result
-                    // existingResult.answers is usually [{questionId, selectedOption, ...}]
-                    // We need to map it back to the simple `answers` index array matching `questions` order
-                    const loadedAnswers = new Array(assessData.questions.length).fill(-1)
-                    existingResult.answers.forEach((ans: any) => {
-                        // Assuming questionId corresponds to index or we match by text? 
-                        // The current save logic uses index as questionId.
-                        const idx = parseInt(ans.questionId)
-                        if (!isNaN(idx)) {
-                            loadedAnswers[idx] = ans.selectedOption
+
+                    if (existingResult.status === 'in-progress') {
+                        // RESUME LOGIC
+                        const startedAt = new Date(existingResult.startedAt).getTime()
+                        const now = Date.now()
+                        const elapsedSeconds = Math.floor((now - startedAt) / 1000)
+                        const totalSeconds = durationMinutes * 60
+                        const remaining = totalSeconds - elapsedSeconds
+
+                        if (remaining > 0) {
+                            setTimeLeft(remaining)
+                            setStatus('active')
+                            // Restore answers if any (if backend saved partial progress, but currently we don't save partial per question)
+                        } else {
+                            // Time expired while away
+                            setStatus('active') // Temporarily active to trigger submit
+                            setTimeLeft(0)
                         }
-                    })
-                    setAnswers(loadedAnswers)
-                    setScore(existingResult.score)
-                    setStatus('completed')
+                    } else {
+                        // Already completed/graded
+                        // Load answers
+                        const loadedAnswers = new Array(assessData.questions.length).fill(-1)
+                        if (existingResult.answers) {
+                            existingResult.answers.forEach((ans: any) => {
+                                const idx = parseInt(ans.questionId)
+                                if (!isNaN(idx)) {
+                                    loadedAnswers[idx] = ans.selectedOption
+                                }
+                            })
+                        }
+                        setAnswers(loadedAnswers)
+                        setScore(existingResult.score)
+                        setStatus('completed')
+                    }
                 } else {
                     setStatus('intro')
                 }
@@ -88,7 +157,7 @@ export default function AssessmentDetailPage() {
 
         } catch (error) {
             console.error("Error fetching assessment:", error)
-            toast.error("Failed to load assessment")
+            setStatus('intro')
         }
     }, [id, session, router])
 
@@ -96,39 +165,25 @@ export default function AssessmentDetailPage() {
         fetchData()
     }, [fetchData])
 
-    // Timer Logic
-    useEffect(() => {
-        let timer: NodeJS.Timeout
-        if (status === 'active' && timeLeft > 0) {
-            timer = setInterval(() => {
-                setTimeLeft((prev) => prev - 1)
-            }, 1000)
-        } else if (status === 'active' && timeLeft === 0) {
-            handleSubmit()
-        }
-        return () => clearInterval(timer)
-    }, [status, timeLeft])
-
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60)
         const secs = seconds % 60
         return `${mins}:${secs < 10 ? '0' : ''}${secs}`
     }
 
-    const handleStart = () => {
-        setStatus('active')
-    }
-
     const handleOptionSelect = (index: number) => {
+        if (timeLeft <= 0) return
         setSelectedOption(index)
     }
 
     const handleNext = () => {
-        if (selectedOption === null) return // Should be disabled anyway
+        if (selectedOption === null) return
 
         const newAnswers = [...answers]
         newAnswers[currentQuestion] = selectedOption
         setAnswers(newAnswers)
+
+        // Optional: Save progress to backend here (partial save)
 
         if (currentQuestion < questions.length - 1) {
             setCurrentQuestion(currentQuestion + 1)
@@ -139,64 +194,67 @@ export default function AssessmentDetailPage() {
     }
 
     const handleSubmit = async (finalAnswers?: number[]) => {
-        const answersToSubmit = finalAnswers || answers
-
-        // Calculate Score locally for immediate feedback (and valid payload)
-        let calculatedScore = 0
-        const formattedAnswers = questions.map((q, idx) => {
-            const selected = answersToSubmit[idx]
-            const isCorrect = selected === q.correctAnswer
-            if (isCorrect) calculatedScore++
-
-            return {
-                questionId: idx.toString(),
-                selectedOption: selected,
-                isCorrect
-            }
-        })
-
-        setScore(calculatedScore)
-        setAnswers(answersToSubmit) // Ensure state is up to date
-        setStatus('completed')
-
-        if (!session?.user) return
+        if (saving) return
+        setSaving(true)
 
         try {
-            setSaving(true)
-            const user = session.user as any
+            const answersToSubmit = finalAnswers || answers
 
-            await fetch('/api/assessment-results', {
+            // Calculate Score locally
+            let calculatedScore = 0
+            const formattedAnswers = questions.map((q, idx) => {
+                const selected = answersToSubmit[idx]
+                const isCorrect = selected === q.correctAnswer
+                if (isCorrect) calculatedScore++
+
+                return {
+                    questionId: idx.toString(),
+                    selectedOption: selected,
+                    isCorrect
+                }
+            })
+
+            const user = session?.user as any
+
+            // Save to DB
+            const res = await fetch('/api/assessment-results', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     student: user.id || user._id,
-                    assessment: id, // Send ID as string
+                    assessment: id,
                     score: calculatedScore,
                     totalMarks: questions.length,
-                    status: calculatedScore >= (questions.length * 0.4) ? 'passed' : 'failed', // 40% pass mark assumption
+                    status: calculatedScore >= (questions.length * 0.4) ? 'passed' : 'failed',
                     answers: formattedAnswers
                 })
             })
-            toast.success("Quiz submitted successfully!")
 
-            try {
-                await fetch('/api/notifications', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        user: user.id || user._id,
-                        title: "Quiz Completed",
-                        message: `You scored ${calculatedScore}/${questions.length} in ${assessment?.title || 'the quiz'}.`,
-                        type: 'success'
+            const json = await res.json()
+            if (json.success) {
+                setScore(calculatedScore)
+                setAnswers(answersToSubmit)
+                setStatus('completed')
+                toast.success("Quiz submitted successfully!")
+
+                // Notification...
+                try {
+                    await fetch('/api/notifications', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            user: user.id,
+                            title: "Quiz Submitted",
+                            message: `You scored ${calculatedScore}/${questions.length}`,
+                            type: 'success'
+                        })
                     })
-                })
-            } catch (ignore) { }
-
-            // Re-fetch to confirm saved state and allow "View Details" to work with persistent data matches
-            // But we already set status to completed, so UI is fine.
-        } catch (error) {
-            console.error("Failed to save result", error)
-            toast.error("Failed to save result to database")
+                } catch (e) { }
+            } else {
+                toast.error("Failed to submit")
+            }
+        } catch (e) {
+            console.error(e)
+            toast.error("Submission error")
         } finally {
             setSaving(false)
         }

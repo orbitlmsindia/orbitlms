@@ -59,6 +59,34 @@ export async function POST(req: Request) {
         body.instituteId = session.user.instituteId;
         body.instituteName = session.user.instituteName;
 
+        // Handle Custom Course Logic (Same as Assessments)
+        const isObjectId = (id: string) => /^[0-9a-fA-F]{24}$/.test(id);
+
+        // If it's NOT a valid ID, assume it's a Title
+        if (body.course && !isObjectId(body.course)) {
+            // Find or Create Course by Title
+            const Course = (await import("@/models/Course")).default;
+
+            let courseDoc = await Course.findOne({
+                title: body.course,
+                instituteId: session.user.instituteId
+            });
+
+            if (!courseDoc) {
+                // If course doesn't exist, create it so the assignment has a valid parent
+                courseDoc = await Course.create({
+                    title: body.course,
+                    instructor: session.user.id,
+                    instituteId: session.user.instituteId,
+                    instituteName: session.user.instituteName,
+                    type: 'custom',
+                    status: 'published',
+                    category: 'Custom Subject'
+                });
+            }
+            body.course = courseDoc._id;
+        }
+
         const assignment = await Assignment.create(body);
         return NextResponse.json({ success: true, data: assignment }, { status: 201 });
     } catch (error: any) {

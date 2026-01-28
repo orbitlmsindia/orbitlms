@@ -9,15 +9,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { toast } from "sonner"
-import { Check, X, Users, UserPlus, Shield } from "lucide-react"
+import { Check, X, Users, UserPlus, Shield, LayoutDashboard, BarChart, LineChart, Zap, Award } from "lucide-react"
 
 const sidebarItems = [
-    { title: "Dashboard", href: "/dashboard/manager", icon: "ÃƒÂ°Ã…Â¸Ã‚ÂÃ‚Â " },
-    { title: "Users", href: "/dashboard/manager/users", icon: "ÃƒÂ°Ã…Â¸Ã¢â‚¬ËœÃ‚Â¥" },
-    { title: "Reports", href: "/dashboard/manager/reports", icon: "ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã…Â " },
-    { title: "Analytics", href: "/dashboard/manager/analytics", icon: "ÃƒÂ°Ã…Â¸Ã¢â‚¬Å“Ã‹â€ " },
-    { title: "Performance", href: "/dashboard/manager/performance", icon: "ÃƒÂ¢Ã…Â¡Ã‚Â¡" },
-    { title: "Certificates", href: "/dashboard/manager/certificates", icon: "ÃƒÂ°Ã…Â¸Ã‚ÂÃ¢â‚¬Â " },
+    { title: "Dashboard", href: "/dashboard/manager", icon: <LayoutDashboard size={24} /> },
+    { title: "Users", href: "/dashboard/manager/users", icon: <Users size={24} /> },
+    { title: "Reports", href: "/dashboard/manager/reports", icon: <BarChart size={24} /> },
+    { title: "Analytics", href: "/dashboard/manager/analytics", icon: <LineChart size={24} /> },
+    { title: "Performance", href: "/dashboard/manager/performance", icon: <Zap size={24} /> },
+    { title: "Certificates", href: "/dashboard/manager/certificates", icon: <Award size={24} /> },
 ]
 
 export default function ManagerUsersPage() {

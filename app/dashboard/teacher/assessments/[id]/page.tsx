@@ -294,7 +294,28 @@ export default function AssessmentReviewPage() {
                                                                     <p className="text-xs text-muted-foreground">Click to download and review</p>
                                                                 </div>
                                                             </div>
-                                                            <Button size="sm" onClick={() => window.open(activeSubmission.fileUrl, '_blank')}>
+                                                            <Button size="sm" onClick={() => {
+                                                                const url = activeSubmission.fileUrl;
+                                                                if (url.startsWith('data:')) {
+                                                                    const a = document.createElement('a');
+                                                                    a.href = url;
+                                                                    // Guess extension or default to .bin
+                                                                    let startExt = "file";
+                                                                    if (url.includes('application/pdf')) startExt += ".pdf";
+                                                                    else if (url.includes('image/')) startExt += ".jpg";
+                                                                    else if (url.includes('zip')) startExt += ".zip";
+
+                                                                    a.download = `submission_${activeSubmission.studentName.replace(/\s+/g, '_')}_${activeSubmission.rollNo}_${startExt}`;
+                                                                    document.body.appendChild(a);
+                                                                    a.click();
+                                                                    document.body.removeChild(a);
+                                                                } else {
+                                                                    const fullUrl = url.startsWith('http')
+                                                                        ? url
+                                                                        : `${window.location.origin}${url.startsWith('/') ? '' : '/'}${url}`;
+                                                                    window.open(fullUrl, '_blank', 'noopener,noreferrer');
+                                                                }
+                                                            }}>
                                                                 <Download className="w-4 h-4 mr-2" /> Download
                                                             </Button>
                                                         </div>
