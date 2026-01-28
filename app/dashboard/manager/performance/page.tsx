@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
+import { useState, useEffect } from "react"
 import { HeaderNav } from "@/components/header-nav"
 import { SidebarNav } from "@/components/sidebar-nav"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -20,13 +21,23 @@ const sidebarItems = [
 export default function ManagerPerformancePage() {
     const router = useRouter()
     const { data: session } = useSession()
+    const [data, setData] = useState<any>(null)
+    const [loading, setLoading] = useState(true)
 
-    const departmentalKPIs = [
-        { name: "Product Engineering", score: 92, target: 95, color: "bg-green-500" },
-        { name: "Digital Marketing", score: 68, target: 80, color: "bg-blue-500" },
-        { name: "Customer Relations", score: 85, target: 85, color: "bg-yellow-500" },
-        { name: "Regional Sales", score: 45, target: 60, color: "bg-red-500" },
-    ]
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const res = await fetch('/api/manager/analytics')
+                const json = await res.json()
+                if (json.success) setData(json.data)
+            } catch (error) {
+                console.error("Failed to load performance data")
+            } finally {
+                setLoading(false)
+            }
+        }
+        fetchData()
+    }, [])
 
     return (
         <div className="flex h-screen bg-background">
@@ -46,19 +57,25 @@ export default function ManagerPerformancePage() {
                             <div className="lg:col-span-2 space-y-6">
                                 <Card>
                                     <CardHeader>
-                                        <CardTitle>Departmental KPIs</CardTitle>
-                                        <CardDescription>Track learning performance against corporate targets</CardDescription>
+                                        <CardTitle>Course Performance KPIs</CardTitle>
+                                        <CardDescription>Track learning performance across active courses</CardDescription>
                                     </CardHeader>
                                     <CardContent className="space-y-8">
-                                        {departmentalKPIs.map((kpi, i) => (
-                                            <div key={i} className="space-y-2">
-                                                <div className="flex justify-between text-sm font-medium">
-                                                    <span>{kpi.name}</span>
-                                                    <span className="text-muted-foreground">{kpi.score}% / {kpi.target}% Target</span>
+                                        {loading ? (
+                                            <div className="text-center py-8 text-muted-foreground">Loading performance metrics...</div>
+                                        ) : data?.coursePerformance?.length > 0 ? (
+                                            data.coursePerformance.map((course: any, i: number) => (
+                                                <div key={i} className="space-y-2">
+                                                    <div className="flex justify-between text-sm font-medium">
+                                                        <span>{course.courseName}</span>
+                                                        <span className="text-muted-foreground">{course.avgProgress}% Avg. Progress ({course.totalStudents} Students)</span>
+                                                    </div>
+                                                    <Progress value={course.avgProgress} className="h-2" />
                                                 </div>
-                                                <Progress value={kpi.score} className={`h-2 [&>div]:${kpi.color}`} />
-                                            </div>
-                                        ))}
+                                            ))
+                                        ) : (
+                                            <div className="text-center py-8 text-muted-foreground">No course performance data available.</div>
+                                        )}
                                     </CardContent>
                                 </Card>
                             </div>
@@ -70,11 +87,15 @@ export default function ManagerPerformancePage() {
                                     <CardContent className="space-y-4">
                                         <div className="flex items-center gap-3 p-3 rounded-lg bg-green-500/10 border border-green-500/20">
                                             <Zap className="w-5 h-5 text-green-600" />
-                                            <p className="text-xs font-medium text-green-700">Engineering completion is at an all-time high.</p>
+                                            <p className="text-xs font-medium text-green-700">
+                                                {loading ? "Loading..." : `Overall Completion Rate is ${data?.completionRate}%`}
+                                            </p>
                                         </div>
-                                        <div className="flex items-center gap-3 p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-                                            <Target className="w-5 h-5 text-red-600" />
-                                            <p className="text-xs font-medium text-red-700">Sales department requires immediate focus.</p>
+                                        <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+                                            <Target className="w-5 h-5 text-blue-600" />
+                                            <p className="text-xs font-medium text-blue-700">
+                                                {loading ? "Loading..." : `${data?.totalEnrollments} Total Active Enrollments`}
+                                            </p>
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -84,8 +105,9 @@ export default function ManagerPerformancePage() {
                                     </CardHeader>
                                     <CardContent className="text-center pb-6">
                                         <Award className="w-12 h-12 text-yellow-500 mx-auto mb-2" />
-                                        <h3 className="font-bold">Elite Learning Status</h3>
-                                        <p className="text-xs text-muted-foreground">Institution is in top 5% globally</p>
+                                        <h3 className="font-bold">Total Certifications</h3>
+                                        <p className="text-2xl font-bold mt-2">{loading ? "-" : data?.completedEnrollments}</p>
+                                        <p className="text-xs text-muted-foreground">Students completed courses</p>
                                     </CardContent>
                                 </Card>
                             </div>

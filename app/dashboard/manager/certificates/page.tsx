@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation"
 import { useSession } from "next-auth/react"
+import { useState, useEffect } from "react"
 import { HeaderNav } from "@/components/header-nav"
 import { SidebarNav } from "@/components/sidebar-nav"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -21,9 +22,25 @@ const sidebarItems = [
 export default function ManagerCertificatesPage() {
     const router = useRouter()
     const { data: session } = useSession()
+    const [certificates, setCertificates] = useState<any[]>([])
+    const [loading, setLoading] = useState(true)
 
-    // Placeholder for real data fetching
-    const issuedCertificates: any[] = []
+    useEffect(() => {
+        const fetchCertificates = async () => {
+            try {
+                const res = await fetch('/api/manager/analytics')
+                const json = await res.json()
+                if (json.success) {
+                    setCertificates(json.data.certificates)
+                }
+            } catch (error) {
+                console.error("Failed to load certificates")
+            } finally {
+                setLoading(false)
+            }
+        }
+        fetchCertificates()
+    }, [])
 
     return (
         <div className="flex h-screen bg-background">
@@ -64,9 +81,11 @@ export default function ManagerCertificatesPage() {
                             </CardContent>
                         </Card>
 
-                        {issuedCertificates.length > 0 ? (
+                        {loading ? (
+                            <div className="text-center py-20 text-muted-foreground">Loading certificates...</div>
+                        ) : certificates.length > 0 ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {issuedCertificates.map((cert, i) => (
+                                {certificates.map((cert, i) => (
                                     <Card key={i} className="hover:border-primary/50 transition-all border-l-4 border-l-primary/20">
                                         <CardHeader className="pb-3">
                                             <Award className="w-8 h-8 text-primary mb-2" />
@@ -93,7 +112,7 @@ export default function ManagerCertificatesPage() {
                             <div className="flex flex-col items-center justify-center py-20 text-center text-muted-foreground">
                                 <Award className="w-12 h-12 mb-4 opacity-20" />
                                 <p className="text-lg font-medium">No certificates issued yet</p>
-                                <p className="text-sm">Issued certificates will appear here.</p>
+                                <p className="text-sm">Issued certificates will appear here once students complete courses.</p>
                             </div>
                         )}
                     </div>

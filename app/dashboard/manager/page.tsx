@@ -72,11 +72,19 @@ export default function ManagerDashboard() {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const res = await fetch('/api/stats')
-        const data = await res.json()
-        if (data.success) {
-          setStats(data.data)
-        }
+        const [basicStatsRes, advancedStatsRes] = await Promise.all([
+          fetch('/api/stats'),
+          fetch('/api/manager/analytics')
+        ])
+
+        const basicData = await basicStatsRes.json()
+        const advancedData = await advancedStatsRes.json()
+
+        let mergedStats = {};
+        if (basicData.success) mergedStats = { ...mergedStats, ...basicData.data }
+        if (advancedData.success) mergedStats = { ...mergedStats, ...advancedData.data }
+
+        setStats(mergedStats)
       } catch (error) {
         console.error("Failed to fetch stats")
       } finally {
@@ -275,14 +283,36 @@ export default function ManagerDashboard() {
               <TabsContent value="departments" className="space-y-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle>Department Performance</CardTitle>
-                    <CardDescription>Performance metrics by department</CardDescription>
+                    <CardTitle>Course & Department Performance</CardTitle>
+                    <CardDescription>Average progress and student engagement per course</CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-                      <p>No department data available.</p>
-                      <p className="text-xs mt-2">(Departmental analytics will appear here once configured)</p>
-                    </div>
+                    {stats?.coursePerformance?.length > 0 ? (
+                      <div className="space-y-6">
+                        {stats.coursePerformance.map((course: any, i: number) => (
+                          <div key={i} className="flex items-center justify-between p-4 border rounded-lg">
+                            <div className="space-y-1">
+                              <p className="font-medium leading-none">{course.courseName}</p>
+                              <p className="text-sm text-muted-foreground">{course.totalStudents} Active Students</p>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <div className="text-right">
+                                <span className="text-sm font-bold">{course.avgProgress}%</span>
+                                <p className="text-xs text-muted-foreground">Completion</p>
+                              </div>
+                              <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
+                                <div className="h-full bg-primary" style={{ width: `${course.avgProgress}%` }} />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
+                        <p>No performance data available yet.</p>
+                        <p className="text-xs mt-2">Data will appear once students start progressing in courses.</p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>

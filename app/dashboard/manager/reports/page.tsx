@@ -55,7 +55,7 @@ export default function ManagerReportsPage() {
                                         </div>
                                     </CardHeader>
                                     <CardContent className="flex justify-between items-center pt-0">
-                                        <span className="text-xs font-medium text-muted-foreground uppercase">{report.type} File • Generated Mar 20</span>
+                                        <span className="text-xs font-medium text-muted-foreground uppercase">{report.type} File • Generated {new Date().toLocaleDateString()}</span>
                                         <Button variant="outline" size="sm" className="gap-2">
                                             <Download className="w-4 h-4" /> Download
                                         </Button>
